@@ -687,6 +687,43 @@ def ai_retry_failed(limit: int = 50) -> int:
     return len(ids)
 
 
+def ai_retry_frozen_assignment_errors(limit: int = 500) -> int:
+    """
+    Разовая миграция: письма могли сохранить ошибку вида
+    "Ошибка AI: cannot assign to field 'score/category'" из-за попытки менять frozen AiResult.
+    Сбрасываем такие письма в состояние "нужно AI" и ставим в очередь.
+    """
+    changed = 0
+    with session_scope() as s:
+        msgs = list(
+            s.scalars(
+                select(EmailMessage)
+                .where(
+                    EmailMessage.ai_explanation.is_not(None),
+                )
+                .order_by(EmailMessage.id.desc())
+                .limit(limit)
+            )
+        )
+        ids: list[int] = []
+        for m in msgs:
+            expl = (m.ai_explanation or "")
+            if "cannot assign to field" not in expl:
+                continue
+            m.ai_done = False
+            m.ai_processed_at = None
+            m.ai_model = None
+            # очищаем ошибку, чтобы не засорять UI
+            m.ai_explanation = None
+            changed += 1
+            ids.append(m.id)
+
+    qn = get_queue()
+    for email_id in ids:
+        qn.enqueue(ai_process_email, email_id)
+    return changed
+
+
 def ai_reset_old_errors(limit: int = 500) -> int:
     """
     Миграция для уже существующих записей:

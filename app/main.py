@@ -25,6 +25,7 @@ from app.jobs import (
     ai_reset_empty_explanations,
     ai_reset_old_errors,
     ai_retry_failed,
+    ai_retry_frozen_assignment_errors,
     ai_test_model,
     recompute_all_basic,
     sync_gmail_mailbox,
@@ -911,6 +912,13 @@ def action_ai_test() -> RedirectResponse:
 def action_ai_retry_failed() -> RedirectResponse:
     q = get_queue()
     q.enqueue(ai_retry_failed, 100)
+    return RedirectResponse("/settings", status_code=303)
+
+
+@app.post("/actions/ai-retry-frozen")
+def action_ai_retry_frozen() -> RedirectResponse:
+    q = get_queue()
+    q.enqueue(ai_retry_frozen_assignment_errors, 2000)
     return RedirectResponse("/settings", status_code=303)
 
 
