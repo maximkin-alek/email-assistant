@@ -293,7 +293,7 @@
           <div class="subtitle">Поиск и фильтры здесь. Управление ящиками и AI — в настройках.</div>
         </div>
         <div style="display:flex; gap: 10px; flex-wrap: wrap;">
-          <form method="post" action="/actions/sync-all" style="margin:0;">
+          <form method="post" action="/actions/sync-all" data-ajax="1" style="margin:0;">
             <button class="btn" type="submit">Синхронизировать</button>
           </form>
           {% if last_sync_at %}

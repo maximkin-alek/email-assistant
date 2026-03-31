@@ -940,10 +940,15 @@ def action_ai_reset_empty_explanations() -> RedirectResponse:
 def action_sync_all() -> RedirectResponse:
     q = get_queue()
     with session_scope() as s:
-        mailboxes = list(s.scalars(select(Mailbox.id).where(Mailbox.provider == "imap", Mailbox.is_enabled == True)))  # noqa: E712
-    for mailbox_id in mailboxes:
-        q.enqueue(sync_imap_mailbox, mailbox_id)
-    return RedirectResponse("/settings", status_code=303)
+        mailboxes = list(
+            s.execute(select(Mailbox.id, Mailbox.provider).where(Mailbox.is_enabled == True))  # noqa: E712
+        )
+    for mailbox_id, provider in mailboxes:
+        if provider == "gmail":
+            q.enqueue(sync_gmail_mailbox, mailbox_id)
+        else:
+            q.enqueue(sync_imap_mailbox, mailbox_id)
+    return RedirectResponse("/", status_code=303)
 
 
 @app.post("/actions/sync/{mailbox_id}")
