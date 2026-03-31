@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass
 
@@ -20,6 +21,43 @@ class AiResult:
 
 def _clamp_score(score: int) -> int:
     return max(0, min(100, int(score)))
+
+
+def _limit_text_two_sentences(text: str, max_words: int = 40) -> str:
+    t = (text or "").strip()
+    if not t:
+        return ""
+    # Разделяем по окончаниям предложений (рус/англ), оставляя 1-2 предложения.
+    parts = re.split(r"(?<=[.!?…])\s+", t)
+    parts = [p.strip() for p in parts if p and p.strip()]
+    out = " ".join(parts[:2]).strip()
+    # Если у модели "предложения" получились слишком длинными (без точек),
+    # ограничим по словам — этого достаточно для MVP.
+    words = out.split()
+    if len(words) > max_words:
+        out = " ".join(words[:max_words]).rstrip(".,;:") + "…"
+    return out
+
+
+def _looks_like_newsletter_text(text: str) -> bool:
+    t = (text or "").lower()
+    markers = [
+        "рассылк",
+        "массов",
+        "промо",
+        "акци",
+        "скидк",
+        "промокод",
+        "маркетинг",
+        "реклам",
+        "unsubscribe",
+        "отпис",
+        "подпис",
+        "newsletter",
+        "digest",
+        "дайджест",
+    ]
+    return any(m in t for m in markers)
 
 
 def _truncate(s: str | None, limit: int) -> str | None:
@@ -470,6 +508,17 @@ def classify_and_summarize(
         explanation = _heuristic_explanation(category)
 
     category, score = _heuristic_adjust(category, score)
+
+    # Ограничим "описания" до 2 предложений и сделаем их короткими.
+    summary = _limit_text_two_sentences(summary, max_words=35) or summary
+    explanation = _limit_text_two_sentences(explanation, max_words=35) or explanation
+
+    # Согласованность: если в тексте явно говорится "рассылка/промо", не должно быть 70+ и important.
+    if _looks_like_newsletter_text(summary) or _looks_like_newsletter_text(explanation):
+        category = "newsletter"
+        score = min(int(score), 25)
+        if not explanation:
+            explanation = "Похоже на массовую рассылку/промо. Можно читать выборочно или отписаться, если не актуально."
 
     return AiResult(category=category, score=score, summary=summary, explanation=explanation, model=used_model)
 

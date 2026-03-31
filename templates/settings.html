@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Настройки — Email Assistant</title>
     <style>
-      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; background: #f6f7fb; }
       a { color: #0b57d0; text-decoration: none; }
       a:hover { text-decoration: underline; }
       .top { display:flex; align-items:center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
@@ -13,7 +13,7 @@
       .btn:hover { background: #f6f6f6; }
       .pill { padding: 2px 8px; border-radius: 999px; border: 1px solid #ddd; font-size: 12px; color:#555; }
       .grid { margin-top: 16px; display: grid; gap: 12px; }
-      .card { border: 1px solid #e5e5e5; border-radius: 12px; padding: 12px; }
+      .card { border: 1px solid #e5e5e5; border-radius: 12px; padding: 12px; background: #fff; }
       .meta { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; color:#555; font-size:13px; }
       .title { font-weight: 750; font-size: 18px; }
       .muted { color:#666; }
@@ -55,9 +55,9 @@
           <div class="kv" style="grid-template-columns: 220px 1fr;">
             <div class="k">Порог “важно” (0–100)</div>
             <div class="v"><input name="important_threshold" value="{{ (rules.get('important_threshold') or '70') }}" style="width:140px; padding:8px 10px; border:1px solid #ddd; border-radius:10px;" /></div>
-            <div class="k">Whitelist (важные)</div>
+            <div class="k">Приоритетные отправители</div>
             <div class="v"><textarea name="sender_whitelist" rows="5" style="width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">{{ rules.get('sender_whitelist') or "" }}</textarea></div>
-            <div class="k">Blacklist (рассылки)</div>
+            <div class="k">Считать рассылками</div>
             <div class="v"><textarea name="sender_blacklist" rows="5" style="width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">{{ rules.get('sender_blacklist') or "" }}</textarea></div>
           </div>
           <div>
@@ -75,25 +75,11 @@
             <span class="pill">{{ ai_model }}</span>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <form method="post" action="/actions/ai-test" style="margin:0;">
-              <button class="btn" type="submit">Проверить AI-модель</button>
-            </form>
             <form method="post" action="/actions/ai-run" style="margin:0;">
               <button class="btn" type="submit">Запустить AI обработку</button>
             </form>
             <form method="post" action="/actions/ai-stop" style="margin:0;">
               <button class="btn" type="submit">Остановить</button>
-            </form>
-            <form method="post" action="/actions/ai-reset-all" style="margin:0;">
-              <button class="btn" type="submit">Сбросить AI-статус (для тестов)</button>
-            </form>
-            <form method="post" action="/actions/ai-reset-mailbox" style="margin:0; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-              <select name="mailbox_id" style="padding:8px 10px; border:1px solid #ddd; border-radius:10px;">
-                {% for m in mailboxes %}
-                  <option value="{{ m.id }}">{{ m.name }} ({{ m.provider }})</option>
-                {% endfor %}
-              </select>
-              <button class="btn" type="submit">Сбросить для ящика</button>
             </form>
           </div>
         </div>
@@ -126,42 +112,64 @@
           <div class="muted" style="margin-top:8px;">Обнови страницу через 10–20 секунд — прогресс будет расти.</div>
         {% endif %}
 
-        {% if ai_test_status %}
-          <div class="muted" style="margin-top:10px;">
-            Тест модели:
-            {% if ai_test_status.message %}{{ ai_test_status.message }}{% else %}—{% endif %}
-            {% if ai_test_status.started_at %} · старт: {{ ai_test_status.started_at }}{% endif %}
-            {% if ai_test_status.finished_at %} · финиш: {{ ai_test_status.finished_at }}{% endif %}
-          </div>
-          {% if ai_test_status.message in ["В очереди", "В процессе"] %}
-            <div class="muted" style="margin-top:6px;">Обнови страницу через 2–5 секунд — появится результат.</div>
-          {% endif %}
-        {% endif %}
-
-        {% if ai_test %}
+        <details style="margin-top:12px;">
+          <summary class="muted" style="cursor:pointer;">Сервисные инструменты</summary>
           <div style="margin-top:10px;">
-            {% if ai_test.ok %}
-              <div class="meta"><span class="pill">Тест</span><span class="pill">OK</span></div>
-              <div class="kv">
-                <div class="k">Когда</div><div class="v">{{ ai_test.tested_at or "—" }}</div>
-                <div class="k">base_url</div><div class="v">{{ ai_test.configured_base_url or "—" }}</div>
-                <div class="k">Модель (настроена)</div><div class="v">{{ ai_test.configured_model or "—" }}</div>
-                <div class="k">Модель (фактическая)</div><div class="v">{{ ai_test.used_model or "—" }}</div>
-                <div class="k">Результат</div><div class="v">{{ ai_test.message }}</div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+              <form method="post" action="/actions/ai-test" style="margin:0;">
+                <button class="btn" type="submit">Проверить AI-модель</button>
+              </form>
+              <form method="post" action="/actions/ai-reset-all" style="margin:0;">
+                <button class="btn" type="submit">Сбросить AI-статус (для тестов)</button>
+              </form>
+              <form method="post" action="/actions/ai-reset-mailbox" style="margin:0; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                <select name="mailbox_id" style="padding:8px 10px; border:1px solid #ddd; border-radius:10px;">
+                  {% for m in mailboxes %}
+                    <option value="{{ m.id }}">{{ m.name }} ({{ m.provider }})</option>
+                  {% endfor %}
+                </select>
+                <button class="btn" type="submit">Сбросить для ящика</button>
+              </form>
+            </div>
+
+            {% if ai_test_status %}
+              <div class="muted" style="margin-top:10px;">
+                Тест модели:
+                {% if ai_test_status.message %}{{ ai_test_status.message }}{% else %}—{% endif %}
+                {% if ai_test_status.started_at %} · старт: {{ ai_test_status.started_at }}{% endif %}
+                {% if ai_test_status.finished_at %} · финиш: {{ ai_test_status.finished_at }}{% endif %}
+              </div>
+              {% if ai_test_status.message in ["В очереди", "В процессе"] %}
+                <div class="muted" style="margin-top:6px;">Обнови страницу через 2–5 секунд — появится результат.</div>
+              {% endif %}
+            {% endif %}
+
+            {% if ai_test %}
+              <div style="margin-top:10px;">
+                {% if ai_test.ok %}
+                  <div class="meta"><span class="pill">Тест</span><span class="pill">OK</span></div>
+                  <div class="kv">
+                    <div class="k">Когда</div><div class="v">{{ ai_test.tested_at or "—" }}</div>
+                    <div class="k">base_url</div><div class="v">{{ ai_test.configured_base_url or "—" }}</div>
+                    <div class="k">Модель (настроена)</div><div class="v">{{ ai_test.configured_model or "—" }}</div>
+                    <div class="k">Модель (фактическая)</div><div class="v">{{ ai_test.used_model or "—" }}</div>
+                    <div class="k">Результат</div><div class="v">{{ ai_test.message }}</div>
+                  </div>
+                {% else %}
+                  <div class="meta"><span class="pill">Тест</span><span class="pill">Ошибка</span></div>
+                  <div class="kv">
+                    <div class="k">Когда</div><div class="v">{{ ai_test.tested_at or "—" }}</div>
+                    <div class="k">base_url</div><div class="v">{{ ai_test.configured_base_url or "—" }}</div>
+                    <div class="k">Модель (настроена)</div><div class="v">{{ ai_test.configured_model or "—" }}</div>
+                  </div>
+                  <div class="err" style="margin-top:10px;">{{ ai_test.message }}</div>
+                {% endif %}
               </div>
             {% else %}
-              <div class="meta"><span class="pill">Тест</span><span class="pill">Ошибка</span></div>
-              <div class="kv">
-                <div class="k">Когда</div><div class="v">{{ ai_test.tested_at or "—" }}</div>
-                <div class="k">base_url</div><div class="v">{{ ai_test.configured_base_url or "—" }}</div>
-                <div class="k">Модель (настроена)</div><div class="v">{{ ai_test.configured_model or "—" }}</div>
-              </div>
-              <div class="err" style="margin-top:10px;">{{ ai_test.message }}</div>
+              <div class="muted" style="margin-top:10px;">Тест ещё не запускался.</div>
             {% endif %}
           </div>
-        {% else %}
-          <div class="muted" style="margin-top:10px;">Тест ещё не запускался.</div>
-        {% endif %}
+        </details>
       </div>
 
       <div class="card">

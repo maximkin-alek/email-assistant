@@ -462,19 +462,22 @@ def ai_process_email(email_id: int) -> None:
                 body_text=msg.body_text,
             )
 
-            # применяем правила после AI
+            # применяем правила после AI (мягкий режим):
+            # - не "ломаем" категорию в лоб, а сдвигаем score и только затем порогом переводим в important.
+            score_i = int(result.score or 0)
             if any(_sender_matches(x) for x in bl_list):
-                result.category = "newsletter"
-                result.score = min(int(result.score or 0), 10)
-                result.explanation = ((result.explanation or "").strip() or "Правило: отправитель в blacklist.")
-            elif any(_sender_matches(x) for x in wl_list):
+                # Считать рассылкой: понижаем важность и не даём стать important.
+                score_i = min(score_i, 25)
+                if result.category == "important":
+                    result.category = "normal"
+            if any(_sender_matches(x) for x in wl_list):
+                # Приоритетные отправители: повышаем важность до порога.
+                score_i = max(score_i, threshold)
+            result.score = score_i
+
+            # порог важности
+            if (result.category not in {"newsletter", "spam_candidate"}) and (int(result.score or 0) >= threshold):
                 result.category = "important"
-                result.score = max(int(result.score or 0), threshold)
-                # explanation оставляем AI-ный, он важен
-            else:
-                # порог важности
-                if (result.category not in {"newsletter", "spam_candidate"}) and (int(result.score or 0) >= threshold):
-                    result.category = "important"
             msg.category = result.category
             msg.score = result.score
             msg.summary = result.summary

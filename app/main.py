@@ -262,6 +262,32 @@ def _startup() -> None:
     _run_quick("bootstrap imap", _bootstrap_imap_mailboxes, 3.0)
     _run_quick("bootstrap gmail", _bootstrap_gmail_mailbox, 3.0)
 
+    # Боевой авто-синк: раз в 5 минут запускаем sync по включенным ящикам.
+    def _autosync_loop() -> None:
+        import time
+
+        from app.queue import get_redis
+
+        while True:
+            try:
+                r = get_redis()
+                # Redis-lock, чтобы не плодить параллельные синки
+                if r.set("autosync:lock", "1", nx=True, ex=240):
+                    q = get_queue()
+                    with session_scope() as s:
+                        ids = list(s.scalars(select(Mailbox.id).where(Mailbox.is_enabled == True)))  # noqa: E712
+                        mbs = list(s.scalars(select(Mailbox).where(Mailbox.id.in_(ids))))
+                    for mb in mbs:
+                        if mb.provider == "imap":
+                            q.enqueue(sync_imap_mailbox, mb.id)
+                        elif mb.provider == "gmail":
+                            q.enqueue(sync_gmail_mailbox, mb.id)
+            except Exception:
+                pass
+            time.sleep(300)
+
+    threading.Thread(target=_autosync_loop, daemon=True).start()
+
 
 def _bootstrap_imap_mailboxes() -> None:
     """
@@ -319,6 +345,10 @@ def index(
     with session_scope() as s:
         mailboxes = list(s.scalars(select(Mailbox).order_by(Mailbox.id.asc())))
         mailbox_map = {m.id: m for m in mailboxes}
+        last_sync_at = None
+        for m in mailboxes:
+            if m.last_sync_at and (last_sync_at is None or m.last_sync_at > last_sync_at):
+                last_sync_at = m.last_sync_at
 
         base_qry = select(EmailMessage).where(EmailMessage.is_archived == False)  # noqa: E712
         qry = (
@@ -474,6 +504,7 @@ def index(
             "quick_links": quick_links,
             "thread": (thread or "").strip(),
             "subj": (subj or "").strip(),
+            "last_sync_at": last_sync_at,
         },
     )
 
@@ -827,7 +858,7 @@ def action_ai_run() -> RedirectResponse:
     # даже если очередь длинная и job начнётся позже.
     set_ai_run_status(AiRunStatus(running=False, started_at=now_iso(), message="В очереди"))
     set_ai_stop_flag(False)
-    q.enqueue(ai_run, 10, at_front=True)
+    q.enqueue(ai_run, 200, at_front=True)
     return RedirectResponse("/settings", status_code=303)
 
 

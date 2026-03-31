@@ -293,6 +293,14 @@
           <div class="subtitle">Поиск и фильтры здесь. Управление ящиками и AI — в настройках.</div>
         </div>
         <div style="display:flex; gap: 10px; flex-wrap: wrap;">
+          <form method="post" action="/actions/sync-all" style="margin:0;">
+            <button class="btn" type="submit">Синхронизировать</button>
+          </form>
+          {% if last_sync_at %}
+            <span class="pill">последняя синхр.: {{ last_sync_at|fmt_dt }}</span>
+          {% else %}
+            <span class="pill">синхр.: ещё не запускалась</span>
+          {% endif %}
           <a class="btn primary" href="/settings" style="display:inline-block;">Настройки</a>
         </div>
       </div>
