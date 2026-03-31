@@ -43,6 +43,31 @@
     <div class="grid">
       <div class="card">
         <div class="meta" style="justify-content: space-between;">
+          <div class="title" style="font-size:16px;">Правила секретаря</div>
+          <span class="pill">MVP</span>
+        </div>
+        <div class="muted" style="margin-top:8px;">
+          Порог важности и простые списки отправителей. Формат: по 1 правилу в строке.
+          Примеры: <span class="pill">@company.com</span> <span class="pill">domain:company.com</span> <span class="pill">subject:оплата</span> <span class="pill">user@site.ru</span>
+        </div>
+
+        <form method="post" action="/actions/rules-save" style="margin-top:12px; display:grid; gap:10px;">
+          <div class="kv" style="grid-template-columns: 220px 1fr;">
+            <div class="k">Порог “важно” (0–100)</div>
+            <div class="v"><input name="important_threshold" value="{{ (rules.get('important_threshold') or '70') }}" style="width:140px; padding:8px 10px; border:1px solid #ddd; border-radius:10px;" /></div>
+            <div class="k">Whitelist (важные)</div>
+            <div class="v"><textarea name="sender_whitelist" rows="5" style="width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">{{ rules.get('sender_whitelist') or "" }}</textarea></div>
+            <div class="k">Blacklist (рассылки)</div>
+            <div class="v"><textarea name="sender_blacklist" rows="5" style="width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">{{ rules.get('sender_blacklist') or "" }}</textarea></div>
+          </div>
+          <div>
+            <button class="btn" type="submit">Сохранить правила</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="meta" style="justify-content: space-between;">
           <div>
             <span class="pill">AI base_url</span>
             <span class="pill">{{ ai_base_url }}</span>

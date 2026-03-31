@@ -6,10 +6,18 @@ from sqlalchemy import select
 
 from app.db import session_scope
 from app.crypto import decrypt_str, encrypt_str
-from app.email_parsing import parse_eml
-from app.gmail_client import build_gmail_service, extract_headers, get_profile
+import json
+
+from app.email_parsing import extract_attachments_from_eml, parse_eml
+from app.gmail_client import (
+    build_gmail_service,
+    extract_attachments_from_gmail_message,
+    extract_bodies_from_gmail_payload,
+    extract_headers,
+    get_profile,
+)
 from app.imap_client import ImapConfig, ImapSession
-from app.models import EmailMessage, Mailbox
+from app.models import AppSetting, EmailAttachment, EmailMessage, Mailbox
 from app.ai_client import classify_and_summarize
 from app.app_state import (
     AiRunStatus,
@@ -132,10 +140,26 @@ def sync_imap_mailbox(mailbox_id: int, limit: int = 50) -> int:
                         date=parsed["date"],
                         snippet=parsed["snippet"],
                         body_text=parsed["body_text"],
+                        body_html=parsed.get("body_html"),
+                        extracted_links_json=json.dumps(parsed.get("extracted_links") or [], ensure_ascii=False),
+                        extracted_images_json=json.dumps(parsed.get("extracted_images") or [], ensure_ascii=False),
                         is_read=is_read,
                     )
                     s.add(msg)
                     s.flush()
+                    # вложения (включая inline cid картинки)
+                    for att in extract_attachments_from_eml(raw, limit=20, max_bytes=2_000_000):
+                        s.add(
+                            EmailAttachment(
+                                email_id=msg.id,
+                                filename=att.get("filename"),
+                                content_type=att.get("content_type"),
+                                size_bytes=att.get("size_bytes"),
+                                content_id=att.get("content_id"),
+                                is_inline=bool(att.get("is_inline")),
+                                data=att.get("data"),
+                            )
+                        )
                     inserted += 1
                     max_uid = max(max_uid, uid)
                     new_ids.append(msg.id)
@@ -242,16 +266,47 @@ def sync_gmail_mailbox(mailbox_id: int, limit: int = 50) -> int:
         for mid in msg_ids:
 
             with session_scope() as s:
-                exists = s.scalars(
+                exists_id = s.scalars(
                     select(EmailMessage.id).where(
                         EmailMessage.mailbox_id == mailbox_id,
                         EmailMessage.provider_message_id == mid,
                     )
                 ).first()
-                if exists:
+                # Если письмо уже есть, но мы раньше сохраняли только metadata (без body),
+                # то обновим поля контента/ссылок/картинок.
+                if exists_id:
+                    msg = s.get(EmailMessage, exists_id)
+                    if msg:
+                        need_body = (msg.body_text is None and msg.body_html is None and msg.extracted_links_json is None)
+                        need_att = (
+                            s.scalars(select(EmailAttachment.id).where(EmailAttachment.email_id == msg.id).limit(1)).first()
+                            is None
+                        )
+                        if need_body or need_att:
+                            full = service.users().messages().get(userId="me", id=mid, format="full").execute()
+                            payload = full.get("payload") or {}
+                            if need_body:
+                                body_text, body_html, links, images = extract_bodies_from_gmail_payload(payload)
+                                msg.body_text = body_text
+                                msg.body_html = body_html
+                                msg.extracted_links_json = json.dumps(links or [], ensure_ascii=False)
+                                msg.extracted_images_json = json.dumps(images or [], ensure_ascii=False)
+                            if need_att:
+                                for att in extract_attachments_from_gmail_message(service, mid, payload, limit=20, max_bytes=2_000_000):
+                                    s.add(
+                                        EmailAttachment(
+                                            email_id=msg.id,
+                                            filename=att.get("filename"),
+                                            content_type=att.get("content_type"),
+                                            size_bytes=att.get("size_bytes"),
+                                            content_id=att.get("content_id"),
+                                            is_inline=bool(att.get("is_inline")),
+                                            data=att.get("data"),
+                                        )
+                                    )
                     continue
 
-            full = service.users().messages().get(userId="me", id=mid, format="metadata").execute()
+            full = service.users().messages().get(userId="me", id=mid, format="full").execute()
             payload = full.get("payload") or {}
             label_ids = full.get("labelIds") or []
             is_read = True
@@ -263,6 +318,7 @@ def sync_gmail_mailbox(mailbox_id: int, limit: int = 50) -> int:
             date_hdr = headers.get("date")
             thread_id = full.get("threadId")
             snippet = full.get("snippet")
+            body_text, body_html, links, images = extract_bodies_from_gmail_payload(payload)
 
             parsed_date = None
             if date_hdr:
@@ -284,11 +340,26 @@ def sync_gmail_mailbox(mailbox_id: int, limit: int = 50) -> int:
                     subject=subject,
                     date=parsed_date,
                     snippet=snippet,
-                    body_text=None,
+                    body_text=body_text,
+                    body_html=body_html,
+                    extracted_links_json=json.dumps(links or [], ensure_ascii=False),
+                    extracted_images_json=json.dumps(images or [], ensure_ascii=False),
                     is_read=is_read,
                 )
                 s.add(msg)
                 s.flush()
+                for att in extract_attachments_from_gmail_message(service, mid, payload, limit=20, max_bytes=2_000_000):
+                    s.add(
+                        EmailAttachment(
+                            email_id=msg.id,
+                            filename=att.get("filename"),
+                            content_type=att.get("content_type"),
+                            size_bytes=att.get("size_bytes"),
+                            content_id=att.get("content_id"),
+                            is_inline=bool(att.get("is_inline")),
+                            data=att.get("data"),
+                        )
+                    )
                 inserted += 1
                 q.enqueue(classify_basic, msg.id)
                 new_ids.append(msg.id)
@@ -332,6 +403,54 @@ def ai_process_email(email_id: int) -> None:
         if msg.ai_done:
             return
 
+        # Правила секретаря (простые): порог важности, whitelist/blacklist.
+        def _get_setting(k: str, default: str = "") -> str:
+            try:
+                v = s.get(AppSetting, k)
+                return (v.value or "").strip() if v else default
+            except Exception:
+                return default
+
+        threshold_s = _get_setting("important_threshold", "70")
+        try:
+            threshold = int(threshold_s)
+        except Exception:
+            threshold = 70
+        threshold = max(0, min(100, threshold))
+
+        wl = _get_setting("sender_whitelist", "")
+        bl = _get_setting("sender_blacklist", "")
+
+        def _norm_lines(v: str) -> list[str]:
+            out: list[str] = []
+            for line in (v or "").splitlines():
+                line = line.strip().lower()
+                if not line or line.startswith("#"):
+                    continue
+                out.append(line)
+            return out[:200]
+
+        wl_list = _norm_lines(wl)
+        bl_list = _norm_lines(bl)
+
+        from_l = (msg.from_email or "").lower()
+        subj_l = (msg.subject or "").lower()
+
+        def _sender_matches(rule: str) -> bool:
+            r = rule.strip().lower()
+            if not r:
+                return False
+            if r.startswith("@") and ("@" in from_l):
+                # @domain.tld
+                return from_l.endswith(r)
+            if r.startswith("domain:") and ("@" in from_l):
+                dom = r.split(":", 1)[1].strip()
+                return bool(dom and ("@" + dom) in from_l)
+            if r.startswith("subject:"):
+                term = r.split(":", 1)[1].strip()
+                return bool(term and term in subj_l)
+            return r in from_l
+
         try:
             result = classify_and_summarize(
                 subject=msg.subject,
@@ -339,6 +458,20 @@ def ai_process_email(email_id: int) -> None:
                 snippet=msg.snippet,
                 body_text=msg.body_text,
             )
+
+            # применяем правила после AI
+            if any(_sender_matches(x) for x in bl_list):
+                result.category = "newsletter"
+                result.score = min(int(result.score or 0), 10)
+                result.explanation = ((result.explanation or "").strip() or "Правило: отправитель в blacklist.")
+            elif any(_sender_matches(x) for x in wl_list):
+                result.category = "important"
+                result.score = max(int(result.score or 0), threshold)
+                # explanation оставляем AI-ный, он важен
+            else:
+                # порог важности
+                if (result.category not in {"newsletter", "spam_candidate"}) and (int(result.score or 0) >= threshold):
+                    result.category = "important"
             msg.category = result.category
             msg.score = result.score
             msg.summary = result.summary

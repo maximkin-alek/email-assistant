@@ -5,100 +5,369 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Email Assistant</title>
     <style>
-      :root { color-scheme: light; }
-      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
-      .top { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
-      .filters { display: flex; gap: 8px; flex-wrap: wrap; }
-      a { color: #0b57d0; text-decoration: none; }
+      :root{
+        color-scheme: light;
+        --bg: #f6f7fb;
+        --card: #ffffff;
+        --text: #101828;
+        --muted: #667085;
+        --border: #eaecf0;
+        --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.08);
+        --radius: 14px;
+        --accent: #2563eb;
+        --accent-weak: rgba(37,99,235,.10);
+        --warn: #b45309;
+        --warn-weak: #fffbeb;
+        --ok: #15803d;
+        --ok-weak: #ecfdf5;
+      }
+      body{
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .container{ max-width: 1060px; margin: 22px auto; padding: 0 18px; }
+      a { color: var(--accent); text-decoration: none; }
       a:hover { text-decoration: underline; }
-      .btn { border: 1px solid #ccc; padding: 8px 12px; background: #fff; border-radius: 8px; cursor: pointer; }
-      .btn:hover { background: #f6f6f6; }
-      .pill { padding: 2px 8px; border-radius: 999px; border: 1px solid #ddd; font-size: 12px; }
-      .grid { margin-top: 16px; display: grid; gap: 12px; }
-      .card { border: 1px solid #e5e5e5; border-radius: 12px; padding: 12px; }
-      .meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; color: #555; font-size: 13px; }
-      .subject { font-weight: 750; margin: 6px 0 6px; line-height: 1.25; }
-      .subject-line { display:flex; gap: 10px; align-items: baseline; justify-content: space-between; }
-      .subject-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .unread { font-weight: 850; }
-      .date { color:#6b6b6b; font-size: 12px; white-space: nowrap; }
-      .snippet { white-space: pre-wrap; color: #333; margin: 0; }
-      .muted { color: #666; }
+      .top{
+        display:flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+        background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+        padding: 16px; box-shadow: var(--shadow);
+      }
+      .title{ font-size: 20px; font-weight: 850; letter-spacing: -0.01em; }
+      .subtitle{ color: var(--muted); font-size: 13px; margin-top: 2px; }
+      .toolbar{ margin-top: 14px; display:flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+      .panel{
+        background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+        padding: 14px; box-shadow: var(--shadow);
+      }
+      .btn{
+        border: 1px solid var(--border);
+        padding: 10px 12px;
+        background: #fff;
+        border-radius: 12px;
+        cursor: pointer;
+        font-weight: 650;
+        color: var(--text);
+      }
+      .btn:hover{ background: #fbfbfd; }
+      .btn.primary{
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      .btn.primary:hover{ filter: brightness(0.97); }
+      .btn.ghost{ background: transparent; }
+      .input, .select{
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: #fff;
+        min-height: 40px;
+      }
+      .pill{
+        padding: 3px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        font-size: 12px;
+        color: var(--muted);
+        background: #fff;
+      }
+      .pill.ok{ color: var(--ok); background: var(--ok-weak); border-color: rgba(21,128,61,.25); }
+      .pill.warn{ color: var(--warn); background: var(--warn-weak); border-color: rgba(180,83,9,.25); }
+      .grid{ margin-top: 14px; display:grid; gap: 12px; }
+      .card{
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 14px;
+        background: var(--card);
+        box-shadow: var(--shadow);
+        width: 100%;
+      }
+      .card.important{ border-color: rgba(180,83,9,.25); background: var(--warn-weak); }
+      .meta{ display:flex; gap: 10px; align-items:center; flex-wrap:wrap; color: var(--muted); font-size: 13px; }
+      .subject-line{ display:flex; gap: 10px; align-items: baseline; justify-content: space-between; }
+      .subject-text{ flex:1; min-width:0; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; }
+      .unread{ font-weight: 900; }
+      .date{ color: var(--muted); font-size: 12px; white-space: nowrap; }
+      .snippet{
+        white-space: pre-wrap;
+        color: #344054;
+        margin: 0;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      .actions{ margin-top: 10px; display:flex; gap: 8px; flex-wrap: wrap; }
+      details.full { margin-top: 10px; }
+      details.full > summary{
+        list-style: none;
+        cursor: pointer;
+        user-select: none;
+        color: var(--accent);
+        font-weight: 700;
+      }
+      details.full > summary::-webkit-details-marker{ display:none; }
+      details.full .full-body{
+        margin-top: 10px;
+        padding: 12px;
+        background: #fbfbfd;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        color: #344054;
+        white-space: pre-wrap;
+        max-height: 320px;
+        overflow: auto;
+      }
+      .bulkbar{
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 14px;
+        z-index: 50;
+        pointer-events: none;
+      }
+      .bulkbar .panel{
+        pointer-events: auto;
+      }
+      .bulkbar-inner{
+        max-width: 1060px;
+        margin: 0 auto;
+        padding: 0 18px;
+      }
+      .bulkrow{
+        display:flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items:center;
+        justify-content: space-between;
+      }
+      .bulkrow .left, .bulkrow .right{
+        display:flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items:center;
+      }
+      .kbd{
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 4px 8px;
+        background: #fff;
+      }
+      .chips{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+      .chip{
+        display:inline-flex; align-items:center; gap:8px;
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--text);
+        font-weight: 700;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      .chip:hover{ background: #fbfbfd; }
+      .chip.active{ border-color: rgba(37,99,235,.35); background: rgba(37,99,235,.08); color: #1d4ed8; }
     </style>
   </head>
   <body>
-    <div class="top">
-      <div>
-        <div style="font-size: 20px; font-weight: 800;">Входящие</div>
-        <div class="muted">Поиск и фильтры — сверху. Управление ящиками и AI — в настройках.</div>
+    <div class="container">
+      <div class="top">
+        <div>
+          <div class="title">Входящие</div>
+          <div class="subtitle">Поиск и фильтры здесь. Управление ящиками и AI — в настройках.</div>
+        </div>
+        <div style="display:flex; gap: 10px; flex-wrap: wrap;">
+          <a class="btn primary" href="/settings" style="display:inline-block;">Настройки</a>
+        </div>
       </div>
-      <div style="display:flex; gap: 8px; flex-wrap: wrap;">
-        <a class="btn" href="/settings" style="display:inline-block;">Настройки</a>
-      </div>
-    </div>
 
-    <div style="margin-top: 14px; display:flex; gap: 12px; flex-wrap: wrap; align-items: center;">
-      <form method="get" action="/" style="display:flex; gap: 8px; flex-wrap: wrap; align-items:center; margin:0;">
-        <input name="q" value="{{ search_q }}" placeholder="Поиск (тема, отправитель, текст)..." style="width:min(520px, 80vw); padding:10px 12px; border:1px solid #ddd; border-radius:10px;" />
-        <select name="mailbox_id" style="padding:10px 12px; border:1px solid #ddd; border-radius:10px;">
+      <div class="toolbar panel">
+        <form method="get" action="/" style="display:flex; gap: 10px; flex-wrap: wrap; align-items:center; margin:0; width: 100%;">
+          <input class="input" name="q" value="{{ search_q }}" placeholder="Поиск (тема, отправитель, текст)..." style="flex: 1; min-width: 260px;" />
+          {% if thread %}<input type="hidden" name="thread" value="{{ thread }}" />{% endif %}
+          {% if subj %}<input type="hidden" name="subj" value="{{ subj }}" />{% endif %}
+          <select class="select" name="mailbox_id">
           <option value="">Все ящики</option>
           {% for m in mailboxes %}
             <option value="{{ m.id }}" {% if mailbox_id and mailbox_id|int == m.id %}selected{% endif %}>{{ m.name }} ({{ m.provider }})</option>
           {% endfor %}
         </select>
-        <select name="category" style="padding:10px 12px; border:1px solid #ddd; border-radius:10px;">
+          <select class="select" name="category">
           <option value="">Все категории</option>
-          <option value="important" {% if category=='important' %}selected{% endif %}>important</option>
-          <option value="normal" {% if category=='normal' %}selected{% endif %}>normal</option>
-          <option value="newsletter" {% if category=='newsletter' %}selected{% endif %}>newsletter</option>
-          <option value="spam_candidate" {% if category=='spam_candidate' %}selected{% endif %}>spam_candidate</option>
+          <option value="important" {% if category=='important' %}selected{% endif %}>{{ cat_ru["important"] }}</option>
+          <option value="normal" {% if category=='normal' %}selected{% endif %}>{{ cat_ru["normal"] }}</option>
+          <option value="newsletter" {% if category=='newsletter' %}selected{% endif %}>{{ cat_ru["newsletter"] }}</option>
+          <option value="spam_candidate" {% if category=='spam_candidate' %}selected{% endif %}>{{ cat_ru["spam_candidate"] }}</option>
         </select>
-        <button class="btn" type="submit">Показать</button>
-      </form>
-      <a class="pill" href="/">сбросить фильтры</a>
-    </div>
+          <select class="select" name="sort">
+            <option value="date" {% if sort=='date' %}selected{% endif %}>Сортировка: по дате</option>
+            <option value="score" {% if sort=='score' %}selected{% endif %}>Сортировка: по важности</option>
+          </select>
+          <button class="btn primary" type="submit">Показать</button>
+          <a class="btn ghost" href="/">Сбросить</a>
+        </form>
+        <div class="chips" style="margin-top:12px;">
+          <a class="chip {% if quick=='unread' %}active{% endif %}" href="{{ quick_links['unread'] }}">Непрочитанные</a>
+          <a class="chip {% if quick=='important' %}active{% endif %}" href="{{ quick_links['important'] }}">Важные</a>
+          <a class="chip {% if quick=='today' %}active{% endif %}" href="{{ quick_links['today'] }}">Сегодня</a>
+          <a class="chip {% if quick=='week' %}active{% endif %}" href="{{ quick_links['week'] }}">Неделя</a>
+          {% if quick %}
+            <a class="chip" href="{{ quick_links['clear_quick'] }}">Сбросить быстрый фильтр</a>
+          {% endif %}
+        </div>
+      </div>
 
     {# блок статусов/синка перенесён в /settings #}
+
+    {% if today_groups and today_groups|length > 0 %}
+      <div style="margin-top: 14px;">
+        <div style="font-size: 16px; font-weight: 900; letter-spacing:-0.01em;">Сегодня важное</div>
+        <div class="subtitle" style="margin-top: 4px;">Короткий дайджест по тредам/темам (без лишних ссылок/картинок).</div>
+        <div class="grid" style="margin-top: 10px;">
+          {% for g in today_groups %}
+            {% set e = g["top"] %}
+            <div class="card">
+              <div class="meta">
+                <span class="pill warn">{{ cat_ru["important"] }}</span>
+                <span class="pill">писем: {{ g["count"] }}</span>
+                <span class="pill">непрочит.: {{ g["unread"] }}</span>
+                <span class="pill">оценка: {{ e.score or "—" }}</span>
+              </div>
+              <div class="subject-line">
+                <a class="subject-text {% if not e.is_read %}unread{% endif %}" href="/email/{{ e.id }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">{{ (e.subject or "(без темы)")|rfc2047 }}</a>
+                <div class="date">{% if e.date %}{{ e.date|fmt_dt }}{% endif %}</div>
+              </div>
+              <div class="meta">
+                <span class="muted">От:</span>
+                <span>{{ (e.from_email or "—")|rfc2047 }}</span>
+              </div>
+              {% if e.summary %}
+                <p class="snippet" style="margin-top: 8px;">{{ e.summary }}</p>
+              {% elif e.ai_explanation %}
+                <p class="snippet" style="margin-top: 8px;">{{ e.ai_explanation }}</p>
+              {% elif e.snippet %}
+                <p class="snippet" style="margin-top: 8px;">{{ e.snippet }}</p>
+              {% endif %}
+              <div class="actions">
+                <a class="btn" href="{{ request.url.include_query_params(quick='today', category='important') }}">Все важные сегодня</a>
+                {% if g['kind'] == 'thread' %}
+                  <a class="btn" href="{{ request.url.include_query_params(quick='today', category='important', thread=g['key']) }}">Показать письма группы</a>
+                {% else %}
+                  <a class="btn" href="{{ request.url.include_query_params(quick='today', category='important', subj=g['key']) }}">Показать письма группы</a>
+                {% endif %}
+                <form method="post" action="/api/today-group" data-ajax="1" data-api="/api/today-group" style="margin:0;">
+                  <input type="hidden" name="kind" value="{{ g['kind'] }}" />
+                  <input type="hidden" name="key" value="{{ g['key'] }}" />
+                  <input type="hidden" name="action" value="mark_read" />
+                  <button class="btn" type="submit">Отметить группу прочитанной</button>
+                </form>
+                <form method="post" action="/api/today-group" data-ajax="1" data-api="/api/today-group" style="margin:0;">
+                  <input type="hidden" name="kind" value="{{ g['kind'] }}" />
+                  <input type="hidden" name="key" value="{{ g['key'] }}" />
+                  <input type="hidden" name="action" value="archive" />
+                  <button class="btn" type="submit">В архив (группу)</button>
+                </form>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
+    <form id="bulkForm" method="post" action="/actions/bulk" data-ajax="1" data-api="/api/bulk" style="margin:0;">
+      <div class="bulkbar">
+        <div class="bulkbar-inner">
+          <div class="panel">
+            <div class="bulkrow">
+              <div class="left meta">
+                <span class="pill">Выбрано: <span id="selCount">0</span></span>
+                <button class="btn" type="button" id="selAllBtn">Выбрать всё</button>
+                <button class="btn" type="button" id="selUnreadBtn">Выбрать непрочитанные</button>
+                <button class="btn" type="button" id="selNoneBtn">Снять выделение</button>
+                <span class="kbd">Shift+клик — диапазон</span>
+              </div>
+              <div class="right">
+                <select class="select" name="action" id="bulkAction">
+                  <option value="mark_read">Отметить как прочитанные</option>
+                  <option value="archive">В архив</option>
+                  <option value="set_category">Установить категорию…</option>
+                </select>
+                <select class="select" name="category" id="bulkCategory">
+                  <option value="">(категория)</option>
+                  <option value="important">{{ cat_ru["important"] }}</option>
+                  <option value="normal">{{ cat_ru["normal"] }}</option>
+                  <option value="newsletter">{{ cat_ru["newsletter"] }}</option>
+                  <option value="spam_candidate">{{ cat_ru["spam_candidate"] }}</option>
+                </select>
+                <button class="btn primary" type="submit" id="bulkApply">Применить</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
 
     <div class="grid">
       {% if emails|length == 0 %}
         <div class="card">
-          <div class="subject">Писем пока нет</div>
-          <div class="muted">Зайди в “Настройки” и запусти синхронизацию ящиков.</div>
+          <div style="font-weight: 900; font-size: 16px;">Писем пока нет</div>
+          <div class="subtitle">Зайди в “Настройки” и запусти синхронизацию ящиков.</div>
         </div>
       {% endif %}
 
       {% for e in emails %}
         <div class="card">
           <div class="meta">
-            <span class="pill">{{ e.category or "—" }}</span>
-            <span class="pill">score: {{ e.score or "—" }}</span>
+            <label class="pill" style="display:flex; gap:8px; align-items:center;">
+              <input class="msg-check" type="checkbox" form="bulkForm" name="ids" value="{{ e.id }}" data-is-read="{% if e.is_read %}1{% else %}0{% endif %}" />
+              выбрать
+            </label>
+            <span class="pill {% if e.category=='important' %}warn{% elif e.ai_done %}ok{% endif %}">
+              {{ cat_ru.get(e.category or '', e.category or "—") }}
+            </span>
+            <span class="pill">Оценка: {{ e.score or "—" }}</span>
             <span class="pill">AI: {{ "да" if e.ai_done else "нет" }}</span>
+            <span class="pill">
+              ящик:
+              {% set mb = mailbox_map.get(e.mailbox_id) %}
+              {% if mb %}{{ mb.name }} ({{ mb.provider }}){% else %}#{{ e.mailbox_id }}{% endif %}
+            </span>
             {% if e.is_read %}
-              <span class="pill">прочитано</span>
+              <span class="pill ok" data-read-pill="1">прочитано</span>
             {% else %}
-              <span class="pill" style="border-color:#c7d2fe; background:#eef2ff; color:#1e3a8a;">не прочитано</span>
+              <span class="pill warn" data-read-pill="1">не прочитано</span>
             {% endif %}
           </div>
           <div class="subject-line">
-            <div class="subject-text {% if not e.is_read %}unread{% endif %}">{{ e.subject or "(без темы)" }}</div>
-            <div class="date">{% if e.date %}{{ e.date.strftime("%d.%m.%Y %H:%M") }}{% endif %}</div>
+            <a class="subject-text {% if not e.is_read %}unread{% endif %}" href="/email/{{ e.id }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">{{ (e.subject or "(без темы)")|rfc2047 }}</a>
+            <div class="date">{% if e.date %}{{ e.date|fmt_dt }}{% endif %}</div>
           </div>
           <div class="meta">
             <span class="muted">From:</span>
-            <span>{{ e.from_email or "—" }}</span>
+            <span>{{ (e.from_email or "—")|rfc2047 }}</span>
           </div>
-          <div class="meta" style="margin-top:8px;">
-            <form method="post" action="/actions/email/{{ e.id }}/archive" style="margin:0;">
+          <div class="actions">
+            <form method="post" action="/actions/email/{{ e.id }}/archive" data-ajax="1" data-api="/api/email/{{ e.id }}/archive" style="margin:0;">
               <button class="btn" type="submit">Архив</button>
             </form>
-            <form method="post" action="/actions/email/{{ e.id }}/set-category?category=important" style="margin:0;">
+            <form method="post" action="/actions/email/{{ e.id }}/mark-read" data-mark-read="1" data-api="/api/email/{{ e.id }}/mark-read" style="margin:0;">
+              <button class="btn" type="submit">Прочитано</button>
+            </form>
+            <form method="post" action="/actions/email/{{ e.id }}/set-category?category=important" data-ajax="1" data-api="/api/email/{{ e.id }}/set-category" data-category="important" style="margin:0;">
+              <input type="hidden" name="category" value="important" />
               <button class="btn" type="submit">Важно</button>
             </form>
-            <form method="post" action="/actions/email/{{ e.id }}/set-category?category=newsletter" style="margin:0;">
+            <form method="post" action="/actions/email/{{ e.id }}/set-category?category=newsletter" data-ajax="1" data-api="/api/email/{{ e.id }}/set-category" data-category="newsletter" style="margin:0;">
+              <input type="hidden" name="category" value="newsletter" />
               <button class="btn" type="submit">Рассылка</button>
             </form>
-            <form method="post" action="/actions/email/{{ e.id }}/set-category?category=spam_candidate" style="margin:0;">
+            <form method="post" action="/actions/email/{{ e.id }}/set-category?category=spam_candidate" data-ajax="1" data-api="/api/email/{{ e.id }}/set-category" data-category="spam_candidate" style="margin:0;">
+              <input type="hidden" name="category" value="spam_candidate" />
               <button class="btn" type="submit">Спам?</button>
             </form>
           </div>
@@ -108,10 +377,167 @@
             <p class="snippet">{{ e.snippet }}</p>
           {% endif %}
           {% if e.ai_explanation %}
-            <p class="snippet" style="margin-top: 8px; color: #555;">{{ e.ai_explanation }}</p>
+            <p class="snippet" style="margin-top: 10px;">{{ e.ai_explanation }}</p>
           {% endif %}
+
+          {# Полный просмотр теперь на странице письма (/email/{id}) #}
         </div>
       {% endfor %}
     </div>
+    </div>
+
+    <script>
+      (function () {
+        const checks = Array.from(document.querySelectorAll(".msg-check"));
+        const countEl = document.getElementById("selCount");
+        const allBtn = document.getElementById("selAllBtn");
+        const noneBtn = document.getElementById("selNoneBtn");
+        const unreadBtn = document.getElementById("selUnreadBtn");
+        const actionSel = document.getElementById("bulkAction");
+        const catSel = document.getElementById("bulkCategory");
+        const applyBtn = document.getElementById("bulkApply");
+
+        let lastIndex = null;
+
+        function updateCount() {
+          const n = checks.filter(c => c.checked).length;
+          countEl.textContent = String(n);
+          applyBtn.disabled = (n === 0);
+          applyBtn.style.opacity = (n === 0) ? "0.55" : "1";
+        }
+
+        function setAll(val) {
+          checks.forEach(c => { c.checked = val; });
+          updateCount();
+        }
+
+        function onCheckClick(e, idx) {
+          if (e.shiftKey && lastIndex !== null) {
+            const a = Math.min(lastIndex, idx);
+            const b = Math.max(lastIndex, idx);
+            const target = checks[idx].checked;
+            for (let i = a; i <= b; i++) checks[i].checked = target;
+          }
+          lastIndex = idx;
+          updateCount();
+        }
+
+        checks.forEach((c, idx) => {
+          c.addEventListener("click", (e) => onCheckClick(e, idx));
+          c.addEventListener("change", updateCount);
+        });
+
+        allBtn.addEventListener("click", () => setAll(true));
+        noneBtn.addEventListener("click", () => setAll(false));
+        if (unreadBtn) {
+          unreadBtn.addEventListener("click", () => {
+            checks.forEach(c => {
+              const isRead = c.getAttribute("data-is-read") === "1";
+              c.checked = !isRead;
+            });
+            updateCount();
+          });
+        }
+
+        function updateCategoryEnabled() {
+          const needs = actionSel.value === "set_category";
+          catSel.disabled = !needs;
+          catSel.style.opacity = needs ? "1" : "0.6";
+        }
+        actionSel.addEventListener("change", updateCategoryEnabled);
+        updateCategoryEnabled();
+
+        updateCount();
+      })();
+    </script>
+
+    <script>
+      (function () {
+        function qs(sel, root) { return (root || document).querySelector(sel); }
+        function qsa(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
+
+        const CAT_RU = {
+          important: "Важно",
+          normal: "Обычное",
+          newsletter: "Рассылка",
+          spam_candidate: "Спам?"
+        };
+
+        async function postFormJson(url, form) {
+          const fd = new FormData(form);
+          const r = await fetch(url, { method: "POST", body: fd, headers: { "Accept": "application/json" } });
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return await r.json();
+        }
+
+        function setReadUI(card) {
+          const pill = card && qs("[data-read-pill='1']", card);
+          if (pill) {
+            pill.textContent = "прочитано";
+            pill.classList.remove("warn");
+            pill.classList.add("ok");
+          }
+          const subj = card && qs(".subject-text", card);
+          if (subj) subj.classList.remove("unread");
+        }
+
+        function setCategoryUI(card, category) {
+          const pill = card && qs(".meta .pill", card); // первая плашка категории
+          if (pill) {
+            pill.textContent = (CAT_RU[category] || category);
+            pill.classList.remove("ok");
+            pill.classList.remove("warn");
+            if (category === "important") pill.classList.add("warn");
+            else pill.classList.add("ok");
+          }
+        }
+
+        // Универсальный AJAX submit для форм с data-ajax=1
+        qsa("form[data-ajax='1']").forEach((form) => {
+          form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const url = form.getAttribute("data-api");
+            if (!url) return;
+            const btn = qs("button[type='submit']", form) || qs("button", form);
+            if (btn) btn.disabled = true;
+            try {
+              const data = await postFormJson(url, form);
+              if (!data || data.ok === false) throw new Error("api_error");
+
+              const card = form.closest(".card");
+              // archive
+              if (data.archived && card) {
+                card.remove();
+              }
+              // mark read
+              if (url.includes("/mark-read") && card) {
+                setReadUI(card);
+              }
+              // set category
+              if (data.category && card) {
+                setCategoryUI(card, data.category);
+              }
+              // bulk
+              if (url === "/api/bulk") {
+                const ids = (data.archived || []);
+                ids.forEach((id) => {
+                  const el = qs(".msg-check[value='" + id + "']")?.closest(".card");
+                  if (el) el.remove();
+                });
+                (data.updated || []).forEach((id) => {
+                  const el = qs(".msg-check[value='" + id + "']")?.closest(".card");
+                  if (!el) return;
+                  if (data.action === "mark_read") setReadUI(el);
+                  if (data.action === "set_category" && data.category) setCategoryUI(el, data.category);
+                });
+              }
+            } catch (err) {
+              if (btn) btn.disabled = false;
+              alert("Не удалось выполнить действие. Попробуй ещё раз.");
+            }
+          });
+        });
+      })();
+    </script>
   </body>
 </html>

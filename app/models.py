@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Literal
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -58,6 +58,9 @@ class EmailMessage(Base):
 
     snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
     body_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    body_html: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extracted_links_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extracted_images_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     category: Mapped[str | None] = mapped_column(String(32), nullable=True)  # important|normal|newsletter|spam_candidate
     score: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 0..100
@@ -72,4 +75,28 @@ class EmailMessage(Base):
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=lambda: dt.datetime.now(dt.UTC))
+
+
+class EmailAttachment(Base):
+    __tablename__ = "email_attachments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+
+    filename: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    content_id: Mapped[str | None] = mapped_column(String(512), nullable=True, index=True)  # для cid: изображений
+    is_inline: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=lambda: dt.datetime.now(dt.UTC))
+
+
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=lambda: dt.datetime.now(dt.UTC))
 

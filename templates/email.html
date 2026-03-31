@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ (e.subject or "(без темы)")|rfc2047 }} — Email Assistant</title>
+    <style>
+      :root{
+        color-scheme: light;
+        --bg: #f6f7fb;
+        --card: #ffffff;
+        --text: #101828;
+        --muted: #667085;
+        --border: #eaecf0;
+        --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.08);
+        --radius: 14px;
+        --accent: #2563eb;
+      }
+      body{ margin:0; background: var(--bg); color: var(--text);
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+      .container{ max-width: 1060px; margin: 22px auto; padding: 0 18px; }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .top{
+        display:flex; gap: 12px; align-items:center; justify-content: space-between; flex-wrap: wrap;
+        background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+        padding: 14px; box-shadow: var(--shadow);
+      }
+      .btn{
+        border: 1px solid var(--border);
+        padding: 10px 12px;
+        background: #fff;
+        border-radius: 12px;
+        cursor: pointer;
+        font-weight: 650;
+        color: var(--text);
+      }
+      .btn:hover{ background:#fbfbfd; }
+      .pill{
+        padding: 3px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        font-size: 12px;
+        color: var(--muted);
+        background: #fff;
+      }
+      .card{
+        margin-top: 14px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 14px;
+        background: var(--card);
+        box-shadow: var(--shadow);
+      }
+      .title{ font-size: 18px; font-weight: 900; letter-spacing: -0.01em; }
+      .meta{ display:flex; gap: 10px; align-items:center; flex-wrap: wrap; color: var(--muted); font-size: 13px; margin-top: 8px; }
+      .body{
+        margin-top: 12px;
+        padding: 12px;
+        background: #fbfbfd;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        line-height: 1.4;
+        max-height: 70vh;
+        overflow: auto;
+      }
+      .html{
+        margin-top: 12px;
+        padding: 12px;
+        background: #fbfbfd;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        max-height: 70vh;
+        overflow: auto;
+      }
+      .html img{ max-width: 100%; height: auto; }
+      .html a{ word-break: break-word; }
+      .actions{ margin-top: 12px; display:flex; gap: 8px; flex-wrap: wrap; }
+      .attwrap{
+        margin-top: 12px;
+        border: 1px solid #c7d2fe;
+        background: #eef2ff;
+        border-radius: 12px;
+        padding: 12px;
+      }
+      .attwrap .hdr{ display:flex; gap:10px; align-items:center; justify-content: space-between; flex-wrap: wrap; }
+      .attwrap .hdr .t{ font-weight: 900; }
+      .atts{ margin-top: 10px; display:grid; gap: 8px; }
+      .att{ display:flex; gap:10px; align-items:center; justify-content: space-between; padding:10px 12px; border:1px solid var(--border); border-radius: 12px; background:#fff; }
+      .att .name{ font-weight: 800; color: var(--text); }
+      .att .meta2{ font-size: 12px; color: var(--muted); }
+      .att .badge{ font-size: 12px; padding: 2px 8px; border-radius: 999px; border:1px solid var(--border); color: var(--muted); background:#fff; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="top">
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <a class="btn" href="{{ back_url or '/' }}">← Входящие</a>
+          {% if prev_id %}<a class="btn" href="/email/{{ prev_id }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">← Пред.</a>{% endif %}
+          {% if next_id %}<a class="btn" href="/email/{{ next_id }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">След. →</a>{% endif %}
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <span class="pill">ящик: {% if mb %}{{ mb.name }} ({{ mb.provider }}){% else %}#{{ e.mailbox_id }}{% endif %}</span>
+          <span class="pill">AI: {{ "да" if e.ai_done else "нет" }}</span>
+          <span class="pill">Оценка: {{ e.score or "—" }}</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="title">{{ (e.subject or "(без темы)")|rfc2047 }}</div>
+        <div class="meta">
+          <span class="pill">From</span>
+          <span>{{ (e.from_email or "—")|rfc2047 }}</span>
+          {% if e.date %}<span class="pill">{{ e.date|fmt_dt }}</span>{% endif %}
+          {% if e.is_read %}<span class="pill" data-read-pill="1">прочитано</span>{% else %}<span class="pill" data-read-pill="1">не прочитано</span>{% endif %}
+        </div>
+
+        <div class="actions">
+          <form method="post" action="/actions/email/{{ e.id }}/archive" data-ajax="1" data-api="/api/email/{{ e.id }}/archive" style="margin:0;">
+            <button class="btn" type="submit">Архив</button>
+          </form>
+          <form method="post" action="/actions/email/{{ e.id }}/set-category?category=important" data-ajax="1" data-api="/api/email/{{ e.id }}/set-category" style="margin:0;">
+            <input type="hidden" name="category" value="important" />
+            <button class="btn" type="submit">Важно</button>
+          </form>
+          <form method="post" action="/actions/email/{{ e.id }}/set-category?category=newsletter" data-ajax="1" data-api="/api/email/{{ e.id }}/set-category" style="margin:0;">
+            <input type="hidden" name="category" value="newsletter" />
+            <button class="btn" type="submit">Рассылка</button>
+          </form>
+          <form method="post" action="/actions/email/{{ e.id }}/set-category?category=spam_candidate" data-ajax="1" data-api="/api/email/{{ e.id }}/set-category" style="margin:0;">
+            <input type="hidden" name="category" value="spam_candidate" />
+            <button class="btn" type="submit">Спам?</button>
+          </form>
+        </div>
+
+        {% if e.ai_explanation %}
+          <div class="meta"><span class="pill">Объяснение</span><span>{{ e.ai_explanation }}</span></div>
+        {% endif %}
+
+        {% if attachments and attachments|length > 0 %}
+          <div class="attwrap">
+            <div class="hdr">
+              <div class="t">Вложения</div>
+              <div class="pill">{{ attachments|length }}</div>
+            </div>
+            <div class="atts">
+              {% for a in attachments %}
+                <div class="att">
+                  <div>
+                    <div class="name">{{ a.filename or ("attachment-" ~ a.id) }}</div>
+                    <div class="meta2">
+                      {{ a.content_type or "файл" }}
+                      {% if a.size_bytes %} · {{ a.size_bytes }} байт{% endif %}
+                      {% if a.is_inline %} · <span class="badge">inline</span>{% endif %}
+                    </div>
+                  </div>
+                  <div>
+                    <a class="btn" href="/attachments/{{ a.id }}" target="_blank" rel="noopener noreferrer">Скачать</a>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+
+        {% if safe_html %}
+          <div class="html">{{ safe_html|safe }}</div>
+        {% else %}
+          <div class="body">{{ e.body_text or e.snippet or "" }}</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        function qs(sel, root) { return (root || document).querySelector(sel); }
+        function qsa(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
+
+        async function postFormJson(url, form) {
+          const fd = new FormData(form);
+          const r = await fetch(url, { method: "POST", body: fd, headers: { "Accept": "application/json" } });
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return await r.json();
+        }
+
+        qsa("form[data-ajax='1']").forEach((form) => {
+          form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const url = form.getAttribute("data-api");
+            if (!url) return;
+            const btn = qs("button[type='submit']", form) || qs("button", form);
+            if (btn) btn.disabled = true;
+            try {
+              const data = await postFormJson(url, form);
+              if (!data || data.ok === false) throw new Error("api_error");
+              if (data.archived) {
+                // вернёмся к списку
+                window.location.href = "{{ back_url or '/' }}";
+                return;
+              }
+              if (url.includes("/mark-read")) {
+                const pill = qs("[data-read-pill='1']");
+                if (pill) pill.textContent = "прочитано";
+              }
+            } catch (err) {
+              if (btn) btn.disabled = false;
+              alert("Не удалось выполнить действие. Попробуй ещё раз.");
+            }
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>
