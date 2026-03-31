@@ -9,6 +9,7 @@ from email.header import decode_header, make_header
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_, select, update
 from rq.registry import DeferredJobRegistry, ScheduledJobRegistry, StartedJobRegistry
@@ -39,6 +40,8 @@ from app.app_state import AiRunStatus, get_ai_run_status, now_iso, set_ai_run_st
 app = FastAPI(title="Email Assistant")
 templates = Jinja2Templates(directory="templates")
 log = logging.getLogger("email-assistant")
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 def _decode_rfc2047(value: str | None) -> str:

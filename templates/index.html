@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Email Assistant</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
     <style>
       :root{
         color-scheme: light;
@@ -20,6 +21,12 @@
         --warn-weak: #fffbeb;
         --ok: #15803d;
         --ok-weak: #ecfdf5;
+        --danger: #b42318;
+        --danger-weak: #fef3f2;
+        --violet: #7c3aed;
+        --violet-weak: #f5f3ff;
+        --teal: #0f766e;
+        --teal-weak: #ecfeff;
       }
       body{
         font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
@@ -76,6 +83,9 @@
       }
       .pill.ok{ color: var(--ok); background: var(--ok-weak); border-color: rgba(21,128,61,.25); }
       .pill.warn{ color: var(--warn); background: var(--warn-weak); border-color: rgba(180,83,9,.25); }
+      .pill.danger{ color: var(--danger); background: var(--danger-weak); border-color: rgba(180,35,24,.25); }
+      .pill.violet{ color: var(--violet); background: var(--violet-weak); border-color: rgba(124,58,237,.25); }
+      .pill.teal{ color: var(--teal); background: var(--teal-weak); border-color: rgba(15,118,110,.25); }
       .grid{ margin-top: 14px; display:grid; gap: 12px; }
       .card{
         border: 1px solid var(--border);
@@ -85,11 +95,57 @@
         box-shadow: var(--shadow);
         width: 100%;
       }
-      .card.important{ border-color: rgba(180,83,9,.25); background: var(--warn-weak); }
+      .card.important{
+        border-color: rgba(180,83,9,.35);
+        background: linear-gradient(0deg, #ffffff 0%, var(--warn-weak) 100%);
+      }
+      .card.unread-card{
+        border-color: rgba(37,99,235,.35);
+        box-shadow: 0 1px 2px rgba(16,24,40,.06), 0 10px 30px rgba(37,99,235,.12);
+      }
+      .card.important::before,
+      .card.unread-card::before{
+        content:"";
+        display:block;
+        height: 0;
+      }
+      .card.important{ position: relative; }
+      .card.unread-card{ position: relative; }
+      .card.important::after{
+        content:"";
+        position:absolute;
+        left:-1px; top:-1px; bottom:-1px;
+        width: 4px;
+        border-radius: var(--radius) 0 0 var(--radius);
+        background: linear-gradient(180deg, #f59e0b, #ef4444);
+      }
+      .card.unread-card::after{
+        content:"";
+        position:absolute;
+        left:-1px; top:-1px; bottom:-1px;
+        width: 4px;
+        border-radius: var(--radius) 0 0 var(--radius);
+        background: linear-gradient(180deg, #60a5fa, #2563eb);
+      }
       .meta{ display:flex; gap: 10px; align-items:center; flex-wrap:wrap; color: var(--muted); font-size: 13px; }
+      .row{ display:flex; gap: 10px; align-items:center; }
+      .avatar{
+        width: 30px; height: 30px;
+        border-radius: 999px;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        font-weight: 900;
+        font-size: 12px;
+        color: #fff;
+        border: 1px solid rgba(0,0,0,.06);
+        box-shadow: 0 1px 2px rgba(16,24,40,.08);
+        flex: 0 0 auto;
+      }
+      .fromline{ display:flex; gap:10px; align-items:center; }
       .subject-line{ display:flex; gap: 10px; align-items: baseline; justify-content: space-between; }
       .subject-text{ flex:1; min-width:0; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; }
-      .unread{ font-weight: 900; }
+      .unread{ font-weight: 950; color: #0b3bdb; }
       .date{ color: var(--muted); font-size: 12px; white-space: nowrap; }
       .snippet{
         white-space: pre-wrap;
@@ -98,6 +154,30 @@
         line-height: 1.35;
         overflow-wrap: anywhere;
         word-break: break-word;
+      }
+      .ai-note{
+        margin-top: 10px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(124,58,237,.25);
+        background: rgba(124,58,237,.07);
+        color: #2d1b69;
+        font-weight: 650;
+      }
+      .ai-note .lbl{
+        display:inline-flex;
+        align-items:center;
+        gap:8px;
+        font-size: 12px;
+        font-weight: 900;
+        letter-spacing: .02em;
+        text-transform: uppercase;
+        color: rgba(45,27,105,.75);
+        margin-bottom: 6px;
+      }
+      .ai-note .txt{
+        font-weight: 650;
+        color: #2d1b69;
       }
       .actions{ margin-top: 10px; display:flex; gap: 8px; flex-wrap: wrap; }
       details.full { margin-top: 10px; }
@@ -172,6 +252,37 @@
       }
       .chip:hover{ background: #fbfbfd; }
       .chip.active{ border-color: rgba(37,99,235,.35); background: rgba(37,99,235,.08); color: #1d4ed8; }
+      .section{
+        margin-top: 14px;
+        padding: 14px;
+        border-radius: 18px;
+        border: 1px solid rgba(124,58,237,.25);
+        background: radial-gradient(1200px 200px at 10% 0%, rgba(124,58,237,.18), rgba(124,58,237,0) 60%),
+                    radial-gradient(900px 200px at 90% 0%, rgba(37,99,235,.14), rgba(37,99,235,0) 60%),
+                    #ffffff;
+        box-shadow: 0 10px 30px rgba(124,58,237,.10), var(--shadow);
+      }
+      .section-hdr{ display:flex; gap: 10px; align-items: baseline; justify-content: space-between; flex-wrap: wrap; }
+      .section-title{ font-size: 16px; font-weight: 950; letter-spacing:-0.01em; }
+      details.section > summary{
+        list-style: none;
+        cursor: pointer;
+        user-select: none;
+      }
+      details.section > summary::-webkit-details-marker{ display:none; }
+      .chev{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; color: var(--muted); }
+      .banner{
+        margin-top: 12px;
+        border: 1px solid rgba(37,99,235,.25);
+        background: rgba(37,99,235,.08);
+        padding: 10px 12px;
+        border-radius: 14px;
+        display:flex;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+      }
     </style>
   </head>
   <body>
@@ -224,32 +335,60 @@
 
     {# блок статусов/синка перенесён в /settings #}
 
+    {% if thread or subj %}
+      <div class="banner">
+        <div class="meta" style="margin:0;">
+          <span class="pill violet">Показана группа</span>
+          {% if thread %}<span class="pill">тред: {{ thread }}</span>{% endif %}
+          {% if subj %}<span class="pill">тема: {{ subj }}</span>{% endif %}
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap: wrap;">
+          <a class="btn" href="{{ request.url.include_query_params(thread='', subj='') }}">Сбросить группу</a>
+        </div>
+      </div>
+    {% endif %}
+
     {% if today_groups and today_groups|length > 0 %}
-      <div style="margin-top: 14px;">
-        <div style="font-size: 16px; font-weight: 900; letter-spacing:-0.01em;">Сегодня важное</div>
-        <div class="subtitle" style="margin-top: 4px;">Короткий дайджест по тредам/темам (без лишних ссылок/картинок).</div>
+      <details class="section" id="todaySection" open>
+        <summary>
+          <div class="section-hdr">
+            <div>
+              <div class="section-title">Сегодня важное <span class="chev" id="todayChev">▾</span></div>
+              <div class="subtitle" style="margin-top: 4px;">Группы по тредам/темам. Быстрые действия без перезагрузки.</div>
+            </div>
+            <div class="meta" style="margin:0;">
+              <span class="pill violet">фокус</span>
+              <span class="pill">непрочитанное выше</span>
+              <span class="pill">клик — свернуть</span>
+            </div>
+          </div>
+        </summary>
         <div class="grid" style="margin-top: 10px;">
           {% for g in today_groups %}
             {% set e = g["top"] %}
-            <div class="card">
+            <div class="card important {% if g['unread'] and g['unread']>0 %}unread-card{% endif %}">
               <div class="meta">
                 <span class="pill warn">{{ cat_ru["important"] }}</span>
                 <span class="pill">писем: {{ g["count"] }}</span>
-                <span class="pill">непрочит.: {{ g["unread"] }}</span>
+                <span class="pill {% if g['unread'] and g['unread']>0 %}warn{% else %}ok{% endif %}">непрочит.: {{ g["unread"] }}</span>
                 <span class="pill">оценка: {{ e.score or "—" }}</span>
               </div>
               <div class="subject-line">
-                <a class="subject-text {% if not e.is_read %}unread{% endif %}" href="/email/{{ e.id }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">{{ (e.subject or "(без темы)")|rfc2047 }}</a>
+                <a class="subject-text {% if not e.is_read %}unread{% endif %}" data-nav="1" href="/email/{{ e.id }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">{{ (e.subject or "(без темы)")|rfc2047 }}</a>
                 <div class="date">{% if e.date %}{{ e.date|fmt_dt }}{% endif %}</div>
               </div>
-              <div class="meta">
+              <div class="meta fromline">
+                <span class="avatar" data-avatar="1" data-from="{{ (e.from_email or '—')|rfc2047 }}">?</span>
                 <span class="muted">От:</span>
                 <span>{{ (e.from_email or "—")|rfc2047 }}</span>
               </div>
               {% if e.summary %}
                 <p class="snippet" style="margin-top: 8px;">{{ e.summary }}</p>
               {% elif e.ai_explanation %}
-                <p class="snippet" style="margin-top: 8px;">{{ e.ai_explanation }}</p>
+                <div class="ai-note" style="margin-top: 8px;">
+                  <div class="lbl">AI комментарий</div>
+                  <div class="txt">{{ e.ai_explanation }}</div>
+                </div>
               {% elif e.snippet %}
                 <p class="snippet" style="margin-top: 8px;">{{ e.snippet }}</p>
               {% endif %}
@@ -276,7 +415,7 @@
             </div>
           {% endfor %}
         </div>
-      </div>
+      </details>
     {% endif %}
 
     <form id="bulkForm" method="post" action="/actions/bulk" data-ajax="1" data-api="/api/bulk" style="margin:0;">
@@ -321,13 +460,18 @@
       {% endif %}
 
       {% for e in emails %}
-        <div class="card">
+        <div class="card {% if e.category=='important' %}important{% endif %} {% if not e.is_read %}unread-card{% endif %}">
           <div class="meta">
             <label class="pill" style="display:flex; gap:8px; align-items:center;">
               <input class="msg-check" type="checkbox" form="bulkForm" name="ids" value="{{ e.id }}" data-is-read="{% if e.is_read %}1{% else %}0{% endif %}" />
               выбрать
             </label>
-            <span class="pill {% if e.category=='important' %}warn{% elif e.ai_done %}ok{% endif %}">
+            <span class="pill
+              {% if e.category=='important' %}warn
+              {% elif e.category=='newsletter' %}teal
+              {% elif e.category=='spam_candidate' %}danger
+              {% elif e.ai_done %}ok
+              {% endif %}">
               {{ cat_ru.get(e.category or '', e.category or "—") }}
             </span>
             <span class="pill">Оценка: {{ e.score or "—" }}</span>
@@ -344,10 +488,11 @@
             {% endif %}
           </div>
           <div class="subject-line">
-            <a class="subject-text {% if not e.is_read %}unread{% endif %}" href="/email/{{ e.id }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">{{ (e.subject or "(без темы)")|rfc2047 }}</a>
+            <a class="subject-text {% if not e.is_read %}unread{% endif %}" data-nav="1" href="/email/{{ e.id }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">{{ (e.subject or "(без темы)")|rfc2047 }}</a>
             <div class="date">{% if e.date %}{{ e.date|fmt_dt }}{% endif %}</div>
           </div>
-          <div class="meta">
+          <div class="meta fromline">
+            <span class="avatar" data-avatar="1" data-from="{{ (e.from_email or '—')|rfc2047 }}">?</span>
             <span class="muted">From:</span>
             <span>{{ (e.from_email or "—")|rfc2047 }}</span>
           </div>
@@ -355,7 +500,7 @@
             <form method="post" action="/actions/email/{{ e.id }}/archive" data-ajax="1" data-api="/api/email/{{ e.id }}/archive" style="margin:0;">
               <button class="btn" type="submit">Архив</button>
             </form>
-            <form method="post" action="/actions/email/{{ e.id }}/mark-read" data-mark-read="1" data-api="/api/email/{{ e.id }}/mark-read" style="margin:0;">
+            <form method="post" action="/actions/email/{{ e.id }}/mark-read" data-ajax="1" data-api="/api/email/{{ e.id }}/mark-read" style="margin:0;">
               <button class="btn" type="submit">Прочитано</button>
             </form>
             <form method="post" action="/actions/email/{{ e.id }}/set-category?category=important" data-ajax="1" data-api="/api/email/{{ e.id }}/set-category" data-category="important" style="margin:0;">
@@ -377,7 +522,10 @@
             <p class="snippet">{{ e.snippet }}</p>
           {% endif %}
           {% if e.ai_explanation %}
-            <p class="snippet" style="margin-top: 10px;">{{ e.ai_explanation }}</p>
+            <div class="ai-note">
+              <div class="lbl">AI комментарий</div>
+              <div class="txt">{{ e.ai_explanation }}</div>
+            </div>
           {% endif %}
 
           {# Полный просмотр теперь на странице письма (/email/{id}) #}
@@ -454,7 +602,6 @@
     <script>
       (function () {
         function qs(sel, root) { return (root || document).querySelector(sel); }
-        function qsa(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
 
         const CAT_RU = {
           important: "Важно",
@@ -485,58 +632,123 @@
           const pill = card && qs(".meta .pill", card); // первая плашка категории
           if (pill) {
             pill.textContent = (CAT_RU[category] || category);
-            pill.classList.remove("ok");
-            pill.classList.remove("warn");
+            pill.classList.remove("ok", "warn", "danger", "teal", "violet");
             if (category === "important") pill.classList.add("warn");
+            else if (category === "newsletter") pill.classList.add("teal");
+            else if (category === "spam_candidate") pill.classList.add("danger");
             else pill.classList.add("ok");
           }
         }
 
-        // Универсальный AJAX submit для форм с data-ajax=1
-        qsa("form[data-ajax='1']").forEach((form) => {
-          form.addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const url = form.getAttribute("data-api");
-            if (!url) return;
-            const btn = qs("button[type='submit']", form) || qs("button", form);
-            if (btn) btn.disabled = true;
-            try {
-              const data = await postFormJson(url, form);
-              if (!data || data.ok === false) throw new Error("api_error");
+        // Делегированный перехват submit — надёжнее, чем навешивание на каждую форму.
+        document.addEventListener("submit", async (e) => {
+          const form = e.target;
+          if (!(form instanceof HTMLFormElement)) return;
+          if (form.getAttribute("data-ajax") !== "1") return;
+          const url = form.getAttribute("data-api");
+          if (!url) return;
+          e.preventDefault();
+          e.stopPropagation();
 
-              const card = form.closest(".card");
-              // archive
-              if (data.archived && card) {
-                card.remove();
-              }
-              // mark read
-              if (url.includes("/mark-read") && card) {
-                setReadUI(card);
-              }
-              // set category
-              if (data.category && card) {
-                setCategoryUI(card, data.category);
-              }
-              // bulk
-              if (url === "/api/bulk") {
-                const ids = (data.archived || []);
-                ids.forEach((id) => {
-                  const el = qs(".msg-check[value='" + id + "']")?.closest(".card");
-                  if (el) el.remove();
-                });
-                (data.updated || []).forEach((id) => {
-                  const el = qs(".msg-check[value='" + id + "']")?.closest(".card");
-                  if (!el) return;
-                  if (data.action === "mark_read") setReadUI(el);
-                  if (data.action === "set_category" && data.category) setCategoryUI(el, data.category);
-                });
-              }
-            } catch (err) {
-              if (btn) btn.disabled = false;
-              alert("Не удалось выполнить действие. Попробуй ещё раз.");
+          const btn = form.querySelector("button[type='submit']") || form.querySelector("button");
+          if (btn) btn.disabled = true;
+          try {
+            const data = await postFormJson(url, form);
+            if (!data || data.ok === false) throw new Error("api_error");
+
+            const card = form.closest(".card");
+            if (data.archived && card) card.remove();
+            if (url.includes("/mark-read") && card) setReadUI(card);
+            if (data.category && card) setCategoryUI(card, data.category);
+
+            if (url === "/api/bulk") {
+              const ids = (data.archived || []);
+              ids.forEach((id) => {
+                const el = qs(".msg-check[value='" + id + "']")?.closest(".card");
+                if (el) el.remove();
+              });
+              (data.updated || []).forEach((id) => {
+                const el = qs(".msg-check[value='" + id + "']")?.closest(".card");
+                if (!el) return;
+                if (data.action === "mark_read") setReadUI(el);
+                if (data.action === "set_category" && data.category) setCategoryUI(el, data.category);
+              });
             }
-          });
+          } catch (err) {
+            if (btn) btn.disabled = false;
+            alert("Не удалось выполнить действие. Попробуй ещё раз.");
+          }
+        }, true);
+      })();
+    </script>
+
+    <script>
+      (function () {
+        function hashStr(s) {
+          let h = 2166136261;
+          for (let i = 0; i < s.length; i++) {
+            h ^= s.charCodeAt(i);
+            h = Math.imul(h, 16777619);
+          }
+          return h >>> 0;
+        }
+        function pickInitials(from) {
+          const s = (from || "").trim();
+          const m = s.match(/<([^>]+)>/);
+          const email = (m ? m[1] : s).trim();
+          if (!email) return "?";
+          const namePart = email.split("@")[0] || email;
+          const chunks = namePart.replace(/[^a-zA-Z0-9а-яА-Я]+/g, " ").trim().split(/\s+/).filter(Boolean);
+          const a = (chunks[0] || namePart)[0] || "?";
+          const b = (chunks[1] || "")[0] || "";
+          return (a + b).toUpperCase();
+        }
+        function colorFor(from) {
+          const h = hashStr(from || "");
+          const hue = (h % 360);
+          return `hsl(${hue} 70% 45%)`;
+        }
+        document.querySelectorAll("[data-avatar='1']").forEach((el) => {
+          const from = el.getAttribute("data-from") || "";
+          el.textContent = pickInitials(from);
+          el.style.background = colorFor(from);
+          el.title = from;
         });
+      })();
+    </script>
+
+    <script>
+      (function () {
+        // Запоминаем свёрнутое состояние "Сегодня важное"
+        const el = document.getElementById("todaySection");
+        const chev = document.getElementById("todayChev");
+        if (!el) return;
+        const KEY = "todaySectionOpen";
+        try {
+          const saved = localStorage.getItem(KEY);
+          if (saved === "0") el.open = false;
+        } catch (_) {}
+        function sync() {
+          if (chev) chev.textContent = el.open ? "▾" : "▸";
+          try { localStorage.setItem(KEY, el.open ? "1" : "0"); } catch (_) {}
+        }
+        el.addEventListener("toggle", sync);
+        sync();
+      })();
+    </script>
+
+    <script>
+      (function () {
+        // Страховка от "первый клик не перешёл": форсируем навигацию по ссылкам письма.
+        document.addEventListener("click", (e) => {
+          const a = e.target && e.target.closest ? e.target.closest("a[data-nav='1']") : null;
+          if (!a) return;
+          const href = a.getAttribute("href");
+          if (!href) return;
+          e.preventDefault();
+          e.stopPropagation();
+          window.location.href = href;
+        }, true);
       })();
     </script>
   </body>

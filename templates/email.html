@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ (e.subject or "(без темы)")|rfc2047 }} — Email Assistant</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
     <style>
       :root{
         color-scheme: light;
@@ -15,6 +16,10 @@
         --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.08);
         --radius: 14px;
         --accent: #2563eb;
+        --warn: #b45309;
+        --warn-weak: #fffbeb;
+        --ok: #15803d;
+        --ok-weak: #ecfdf5;
       }
       body{ margin:0; background: var(--bg); color: var(--text);
         font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
@@ -44,6 +49,21 @@
         color: var(--muted);
         background: #fff;
       }
+      .pill.ok{ color: var(--ok); background: var(--ok-weak); border-color: rgba(21,128,61,.25); }
+      .pill.warn{ color: var(--warn); background: var(--warn-weak); border-color: rgba(180,83,9,.25); }
+      .avatar{
+        width: 30px; height: 30px;
+        border-radius: 999px;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        font-weight: 900;
+        font-size: 12px;
+        color: #fff;
+        border: 1px solid rgba(0,0,0,.06);
+        box-shadow: 0 1px 2px rgba(16,24,40,.08);
+        flex: 0 0 auto;
+      }
       .card{
         margin-top: 14px;
         border: 1px solid var(--border);
@@ -54,6 +74,7 @@
       }
       .title{ font-size: 18px; font-weight: 900; letter-spacing: -0.01em; }
       .meta{ display:flex; gap: 10px; align-items:center; flex-wrap: wrap; color: var(--muted); font-size: 13px; margin-top: 8px; }
+      .fromline{ display:flex; gap:10px; align-items:center; flex-wrap: wrap; }
       .body{
         margin-top: 12px;
         padding: 12px;
@@ -78,6 +99,27 @@
       .html img{ max-width: 100%; height: auto; }
       .html a{ word-break: break-word; }
       .actions{ margin-top: 12px; display:flex; gap: 8px; flex-wrap: wrap; }
+      .ai-note{
+        margin-top: 12px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(124,58,237,.25);
+        background: rgba(124,58,237,.07);
+        color: #2d1b69;
+        font-weight: 650;
+      }
+      .ai-note .lbl{
+        display:inline-flex;
+        align-items:center;
+        gap:8px;
+        font-size: 12px;
+        font-weight: 900;
+        letter-spacing: .02em;
+        text-transform: uppercase;
+        color: rgba(45,27,105,.75);
+        margin-bottom: 6px;
+      }
+      .ai-note .txt{ color: #2d1b69; font-weight: 650; }
       .attwrap{
         margin-top: 12px;
         border: 1px solid #c7d2fe;
@@ -111,11 +153,12 @@
 
       <div class="card">
         <div class="title">{{ (e.subject or "(без темы)")|rfc2047 }}</div>
-        <div class="meta">
+        <div class="meta fromline">
+          <span class="avatar" data-avatar="1" data-from="{{ (e.from_email or '—')|rfc2047 }}">?</span>
           <span class="pill">From</span>
           <span>{{ (e.from_email or "—")|rfc2047 }}</span>
           {% if e.date %}<span class="pill">{{ e.date|fmt_dt }}</span>{% endif %}
-          {% if e.is_read %}<span class="pill" data-read-pill="1">прочитано</span>{% else %}<span class="pill" data-read-pill="1">не прочитано</span>{% endif %}
+          {% if e.is_read %}<span class="pill ok" data-read-pill="1">прочитано</span>{% else %}<span class="pill warn" data-read-pill="1">не прочитано</span>{% endif %}
         </div>
 
         <div class="actions">
@@ -137,7 +180,10 @@
         </div>
 
         {% if e.ai_explanation %}
-          <div class="meta"><span class="pill">Объяснение</span><span>{{ e.ai_explanation }}</span></div>
+          <div class="ai-note">
+            <div class="lbl">AI комментарий</div>
+            <div class="txt">{{ e.ai_explanation }}</div>
+          </div>
         {% endif %}
 
         {% if attachments and attachments|length > 0 %}
@@ -210,6 +256,41 @@
               alert("Не удалось выполнить действие. Попробуй ещё раз.");
             }
           });
+        });
+      })();
+    </script>
+
+    <script>
+      (function () {
+        function hashStr(s) {
+          let h = 2166136261;
+          for (let i = 0; i < s.length; i++) {
+            h ^= s.charCodeAt(i);
+            h = Math.imul(h, 16777619);
+          }
+          return h >>> 0;
+        }
+        function pickInitials(from) {
+          const s = (from || "").trim();
+          const m = s.match(/<([^>]+)>/);
+          const email = (m ? m[1] : s).trim();
+          if (!email) return "?";
+          const namePart = email.split("@")[0] || email;
+          const chunks = namePart.replace(/[^a-zA-Z0-9а-яА-Я]+/g, " ").trim().split(/\s+/).filter(Boolean);
+          const a = (chunks[0] || namePart)[0] || "?";
+          const b = (chunks[1] || "")[0] || "";
+          return (a + b).toUpperCase();
+        }
+        function colorFor(from) {
+          const h = hashStr(from || "");
+          const hue = (h % 360);
+          return `hsl(${hue} 70% 45%)`;
+        }
+        document.querySelectorAll("[data-avatar='1']").forEach((el) => {
+          const from = el.getAttribute("data-from") || "";
+          el.textContent = pickInitials(from);
+          el.style.background = colorFor(from);
+          el.title = from;
         });
       })();
     </script>
