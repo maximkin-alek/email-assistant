@@ -465,21 +465,21 @@ def ai_process_email(email_id: int) -> None:
             # применяем правила после AI (мягкий режим):
             # - не "ломаем" категорию в лоб, а сдвигаем score и только затем порогом переводим в important.
             score_i = int(result.score or 0)
+            category_i = str(result.category or "normal")
             if any(_sender_matches(x) for x in bl_list):
                 # Считать рассылкой: понижаем важность и не даём стать important.
                 score_i = min(score_i, 25)
-                if result.category == "important":
-                    result.category = "normal"
+                if category_i == "important":
+                    category_i = "normal"
             if any(_sender_matches(x) for x in wl_list):
                 # Приоритетные отправители: повышаем важность до порога.
                 score_i = max(score_i, threshold)
-            result.score = score_i
-
             # порог важности
-            if (result.category not in {"newsletter", "spam_candidate"}) and (int(result.score or 0) >= threshold):
-                result.category = "important"
-            msg.category = result.category
-            msg.score = result.score
+            if (category_i not in {"newsletter", "spam_candidate"}) and (int(score_i or 0) >= threshold):
+                category_i = "important"
+
+            msg.category = category_i
+            msg.score = int(score_i)
             msg.summary = result.summary
             msg.ai_explanation = result.explanation
             msg.ai_model = result.model
