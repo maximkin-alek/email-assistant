@@ -301,7 +301,7 @@
           {% else %}
             <span class="pill">синхр.: ещё не запускалась</span>
           {% endif %}
-          <a class="btn primary" href="/settings" style="display:inline-block;">Настройки</a>
+          <a class="btn primary" data-nav="1" href="/settings" style="display:inline-block;">Настройки</a>
         </div>
       </div>
 
@@ -749,13 +749,17 @@
       (function () {
         // Страховка от "первый клик не перешёл": форсируем навигацию по ссылкам письма.
         document.addEventListener("click", (e) => {
+          if (e.defaultPrevented) return;
+          // Не ломаем стандартное поведение (открыть в новой вкладке и т.п.)
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+          if (typeof e.button === "number" && e.button !== 0) return;
           const a = e.target && e.target.closest ? e.target.closest("a[data-nav='1']") : null;
           if (!a) return;
           const href = a.getAttribute("href");
           if (!href) return;
           e.preventDefault();
-          e.stopPropagation();
-          window.location.href = href;
+          // assign() чуть надёжнее на некоторых браузерах при быстрых кликах
+          window.location.assign(href);
         }, true);
       })();
     </script>
