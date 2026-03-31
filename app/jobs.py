@@ -22,11 +22,14 @@ from app.ai_client import classify_and_summarize
 from app.app_state import (
     AiRunStatus,
     AiTestResult,
+    AiTestStatus,
     get_ai_stop_flag,
+    get_ai_test_status,
     now_iso,
     set_ai_run_status,
     set_ai_stop_flag,
     set_ai_test_result,
+    set_ai_test_status,
 )
 from app.queue import get_queue
 from app.settings import settings
@@ -847,6 +850,8 @@ def ai_reset_mailbox(mailbox_id: int, limit: int = 500) -> int:
 
 
 def ai_test_model() -> None:
+    started = now_iso()
+    set_ai_test_status(AiTestStatus(running=True, started_at=started, message="В процессе"))
     try:
         r = classify_and_summarize(
             subject="Тестовое письмо",
@@ -854,6 +859,8 @@ def ai_test_model() -> None:
             snippet="Пожалуйста, подтвердите встречу завтра в 10:00.",
             body_text=None,
         )
+        finished = now_iso()
+        set_ai_test_status(AiTestStatus(running=False, started_at=started, finished_at=finished, message="Готово"))
         set_ai_test_result(
             AiTestResult(
                 ok=True,
@@ -865,6 +872,8 @@ def ai_test_model() -> None:
             )
         )
     except Exception as e:
+        finished = now_iso()
+        set_ai_test_status(AiTestStatus(running=False, started_at=started, finished_at=finished, message="Ошибка"))
         # Сохраняем человеческое сообщение об ошибке
         set_ai_test_result(
             AiTestResult(

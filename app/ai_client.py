@@ -89,27 +89,32 @@ def classify_and_summarize(
     def _time_left_s() -> float:
         return deadline_s - (time.monotonic() - start)
 
-    def _post(messages: list[dict], temperature: float, model_override: str | None = None) -> dict:
+    def _post(messages: list[dict], temperature: float, model_override: str | None = None, json_mode: bool = True) -> dict:
         left = _time_left_s()
         if left <= 0:
             raise RuntimeError("AI timeout: превышен лимит времени на обработку письма.")
         timeout = httpx.Timeout(connect=5.0, read=min(20.0, left), write=10.0, pool=5.0)
         with httpx.Client(timeout=timeout) as client:
+            body = {
+                "model": (model_override or model),
+                "messages": messages,
+                "temperature": temperature,
+            }
+            if json_mode:
+                # Если провайдер поддерживает JSON mode — это резко повышает стабильность.
+                body["response_format"] = {"type": "json_object"}
             resp = client.post(
                 url,
                 headers={"Authorization": f"Bearer {settings.ai_api_key}", "Content-Type": "application/json"},
-                json={
-                    "model": (model_override or model),
-                    "messages": messages,
-                    "temperature": temperature,
-                    # Если провайдер поддерживает JSON mode — это резко повышает стабильность.
-                    "response_format": {"type": "json_object"},
-                },
+                json=body,
             )
             try:
                 resp.raise_for_status()
             except httpx.HTTPStatusError as e:
                 code = e.response.status_code
+                # Некоторые провайдеры/шлюзы могут не поддерживать response_format.
+                if code == 400 and json_mode:
+                    return _post(messages=messages, temperature=temperature, model_override=model_override, json_mode=False)
                 if code == 401:
                     raise RuntimeError(
                         "AI вернул 401 (Unauthorized): проверь AI_API_KEY и AI_BASE_URL. "

@@ -35,7 +35,17 @@ from app.queue import get_queue
 from app.schema import ensure_schema
 from app.settings import settings
 from app.oauth_state import consume_state, issue_state
-from app.app_state import AiRunStatus, get_ai_run_status, now_iso, set_ai_run_status, set_ai_stop_flag, get_ai_test_result
+from app.app_state import (
+    AiRunStatus,
+    AiTestStatus,
+    get_ai_run_status,
+    get_ai_test_result,
+    get_ai_test_status,
+    now_iso,
+    set_ai_run_status,
+    set_ai_stop_flag,
+    set_ai_test_status,
+)
 
 app = FastAPI(title="Email Assistant")
 templates = Jinja2Templates(directory="templates")
@@ -760,6 +770,7 @@ def settings_page(request: Request) -> HTMLResponse:
         context={
             "mailboxes": mailboxes,
             "ai_test": get_ai_test_result(),
+            "ai_test_status": get_ai_test_status(),
             "ai_run": run,
             "ai_run_started_h": _fmt_iso(run.started_at),
             "ai_run_finished_h": _fmt_iso(run.finished_at),
@@ -859,6 +870,8 @@ def action_ai_reset_mailbox(mailbox_id: int = Form(...)) -> RedirectResponse:
 @app.post("/actions/ai-test")
 def action_ai_test() -> RedirectResponse:
     q = get_queue()
+    # Ставим статус сразу, чтобы было понятно, что тест запущен.
+    set_ai_test_status(AiTestStatus(running=False, started_at=now_iso(), message="В очереди"))
     q.enqueue(ai_test_model)
     return RedirectResponse("/settings", status_code=303)
 

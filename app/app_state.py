@@ -17,7 +17,16 @@ class AiTestResult:
     tested_at: str = ""
 
 
+@dataclass(frozen=True)
+class AiTestStatus:
+    running: bool
+    started_at: str = ""
+    finished_at: str = ""
+    message: str = ""
+
+
 AI_TEST_KEY = "ai_test:last"
+AI_TEST_STATUS_KEY = "ai_test:status"
 AI_RUN_KEY = "ai_run:last"
 AI_STOP_KEY = "ai_run:stop"
 
@@ -45,6 +54,26 @@ def get_ai_test_result() -> AiTestResult | None:
             used_model=used_model,
             message=str(d.get("message") or ""),
             tested_at=tested_at,
+        )
+    except Exception:
+        return None
+
+
+def set_ai_test_status(status: AiTestStatus) -> None:
+    get_redis().set(AI_TEST_STATUS_KEY, json.dumps(asdict(status), ensure_ascii=False))
+
+
+def get_ai_test_status() -> AiTestStatus | None:
+    raw = get_redis().get(AI_TEST_STATUS_KEY)
+    if not raw:
+        return None
+    try:
+        d = json.loads(raw.decode("utf-8", errors="ignore"))
+        return AiTestStatus(
+            running=bool(d.get("running")),
+            started_at=str(d.get("started_at") or ""),
+            finished_at=str(d.get("finished_at") or ""),
+            message=str(d.get("message") or ""),
         )
     except Exception:
         return None

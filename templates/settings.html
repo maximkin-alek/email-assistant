@@ -126,6 +126,18 @@
           <div class="muted" style="margin-top:8px;">Обнови страницу через 10–20 секунд — прогресс будет расти.</div>
         {% endif %}
 
+        {% if ai_test_status %}
+          <div class="muted" style="margin-top:10px;">
+            Тест модели:
+            {% if ai_test_status.message %}{{ ai_test_status.message }}{% else %}—{% endif %}
+            {% if ai_test_status.started_at %} · старт: {{ ai_test_status.started_at }}{% endif %}
+            {% if ai_test_status.finished_at %} · финиш: {{ ai_test_status.finished_at }}{% endif %}
+          </div>
+          {% if ai_test_status.message in ["В очереди", "В процессе"] %}
+            <div class="muted" style="margin-top:6px;">Обнови страницу через 2–5 секунд — появится результат.</div>
+          {% endif %}
+        {% endif %}
+
         {% if ai_test %}
           <div style="margin-top:10px;">
             {% if ai_test.ok %}

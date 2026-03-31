@@ -56,6 +56,17 @@ npx cursor-api-proxy
 - `AI_API_KEY=unused` (или значение `CURSOR_BRIDGE_API_KEY`, если ты включил авторизацию на прокси)
 - `AI_MODEL=gpt-5.4-nano-low` (рекомендуется фиксировать конкретную модель)
 
+## AI через RouterAI (рекомендуется для “дёшево и стабильно”)
+
+RouterAI даёт **OpenAI‑совместимый** `chat/completions` API и оплату в рублях.
+
+- **base_url**: `https://routerai.ru/api/v1`
+- **endpoint**: `POST /chat/completions`
+- **ключ**: `Authorization: Bearer ...`
+- **пример модели (дешёвая и сильная)**: `deepseek/deepseek-v3.2`
+
+См. документацию RouterAI: `https://routerai.ru/docs/guides`
+
 ## IMAP (Яндекс / Mail.ru)
 
 - Для Яндекс/Mail.ru обычно нужен **пароль приложения** (если включён 2FA) и включённый IMAP-доступ.
