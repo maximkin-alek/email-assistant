@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Настройки — Email Assistant</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
+      a { color: #0b57d0; text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .top { display:flex; align-items:center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+      .btn { border: 1px solid #ccc; padding: 8px 12px; background: #fff; border-radius: 10px; cursor: pointer; }
+      .btn:hover { background: #f6f6f6; }
+      .pill { padding: 2px 8px; border-radius: 999px; border: 1px solid #ddd; font-size: 12px; color:#555; }
+      .grid { margin-top: 16px; display: grid; gap: 12px; }
+      .card { border: 1px solid #e5e5e5; border-radius: 12px; padding: 12px; }
+      .meta { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; color:#555; font-size:13px; }
+      .title { font-weight: 750; font-size: 18px; }
+      .muted { color:#666; }
+      .err { color: #8a1f1f; white-space: pre-wrap; }
+      .kv { display:grid; grid-template-columns: 160px 1fr; gap: 6px 10px; margin-top: 10px; font-size: 13px; }
+      .k { color:#666; }
+      .v { color:#111; word-break: break-word; }
+      .ok { color: #14532d; }
+      .warn { color: #92400e; }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <div>
+        <div class="title">Настройки</div>
+        <div class="muted">Подключения, синхронизация и тест AI-модели.</div>
+      </div>
+      <div style="display:flex; gap: 8px; flex-wrap: wrap;">
+        <a class="btn" href="/">← Входящие</a>
+        <a class="btn" href="/connect/gmail">Подключить Gmail</a>
+        <form method="post" action="/actions/recompute" style="margin:0;">
+          <button class="btn" type="submit">Пересчитать базовую классификацию</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="meta" style="justify-content: space-between;">
+          <div>
+            <span class="pill">AI base_url</span>
+            <span class="pill">{{ ai_base_url }}</span>
+            <span class="pill">AI model</span>
+            <span class="pill">{{ ai_model }}</span>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <form method="post" action="/actions/ai-test" style="margin:0;">
+              <button class="btn" type="submit">Проверить AI-модель</button>
+            </form>
+            <form method="post" action="/actions/ai-run" style="margin:0;">
+              <button class="btn" type="submit">Запустить AI обработку</button>
+            </form>
+            <form method="post" action="/actions/ai-stop" style="margin:0;">
+              <button class="btn" type="submit">Остановить</button>
+            </form>
+            <form method="post" action="/actions/ai-reset-all" style="margin:0;">
+              <button class="btn" type="submit">Сбросить AI-статус (для тестов)</button>
+            </form>
+            <form method="post" action="/actions/ai-reset-mailbox" style="margin:0; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+              <select name="mailbox_id" style="padding:8px 10px; border:1px solid #ddd; border-radius:10px;">
+                {% for m in mailboxes %}
+                  <option value="{{ m.id }}">{{ m.name }} ({{ m.provider }})</option>
+                {% endfor %}
+              </select>
+              <button class="btn" type="submit">Сбросить для ящика</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="kv">
+          <div class="k">Статус</div>
+          <div class="v">
+            {% if ai_run and ai_run.message == "В очереди" %}
+              <span class="warn">В очереди</span>
+            {% elif ai_run and ai_run.running %}
+              <span class="warn">В процессе</span>
+            {% else %}
+              <span class="ok">Не выполняется</span>
+            {% endif %}
+            {% if ai_run and ai_run.message and ai_run.message not in ["В очереди"] %} — {{ ai_run.message }}{% endif %}
+          </div>
+          <div class="k">Прогресс</div>
+          <div class="v">
+            {% if ai_run %}
+              {{ ai_run.processed }}/{{ ai_run.total }} (OK: {{ ai_run.ok }}, ошибки: {{ ai_run.failed }})
+            {% else %}
+              —
+            {% endif %}
+          </div>
+          <div class="k">Очередь</div><div class="v">ожидают: {{ queue_pending }}, выполняются: {{ queue_started }}</div>
+          <div class="k">Старт</div><div class="v">{{ ai_run_started_h or "—" }}</div>
+          <div class="k">Финиш</div><div class="v">{{ ai_run_finished_h or "—" }}</div>
+        </div>
+        {% if ai_run and ai_run.running %}
+          <div class="muted" style="margin-top:8px;">Обнови страницу через 10–20 секунд — прогресс будет расти.</div>
+        {% endif %}
+
+        {% if ai_test %}
+          <div style="margin-top:10px;">
+            {% if ai_test.ok %}
+              <div class="meta"><span class="pill">Тест</span><span class="pill">OK</span></div>
+              <div class="kv">
+                <div class="k">Когда</div><div class="v">{{ ai_test.tested_at or "—" }}</div>
+                <div class="k">base_url</div><div class="v">{{ ai_test.configured_base_url or "—" }}</div>
+                <div class="k">Модель (настроена)</div><div class="v">{{ ai_test.configured_model or "—" }}</div>
+                <div class="k">Модель (фактическая)</div><div class="v">{{ ai_test.used_model or "—" }}</div>
+                <div class="k">Результат</div><div class="v">{{ ai_test.message }}</div>
+              </div>
+            {% else %}
+              <div class="meta"><span class="pill">Тест</span><span class="pill">Ошибка</span></div>
+              <div class="kv">
+                <div class="k">Когда</div><div class="v">{{ ai_test.tested_at or "—" }}</div>
+                <div class="k">base_url</div><div class="v">{{ ai_test.configured_base_url or "—" }}</div>
+                <div class="k">Модель (настроена)</div><div class="v">{{ ai_test.configured_model or "—" }}</div>
+              </div>
+              <div class="err" style="margin-top:10px;">{{ ai_test.message }}</div>
+            {% endif %}
+          </div>
+        {% else %}
+          <div class="muted" style="margin-top:10px;">Тест ещё не запускался.</div>
+        {% endif %}
+      </div>
+
+      <div class="card">
+        <div class="meta" style="justify-content: space-between;">
+          <div class="title" style="font-size:16px;">Синхронизация ящиков</div>
+          <form method="post" action="/actions/sync-all" style="margin:0;">
+            <button class="btn" type="submit">Синхронизировать IMAP</button>
+          </form>
+        </div>
+
+        <div class="grid" style="margin-top: 12px;">
+          {% for m in mailboxes %}
+            <div class="card">
+              <div class="meta">
+                <span class="pill">{{ m.name }}</span>
+                <span class="pill">{{ m.provider }}</span>
+                {% if m.provider == 'imap' %}
+                  <span class="pill">folder: {{ m.imap_folder or "—" }}</span>
+                  <span class="pill">last_uid: {{ m.imap_last_uid or "—" }}</span>
+                {% else %}
+                  <span class="pill">email: {{ m.gmail_email or "—" }}</span>
+                {% endif %}
+              </div>
+              <div class="meta" style="margin-top:8px; justify-content: space-between;">
+                <div class="meta">
+                  <span class="pill">sync: {{ m.last_sync_status or "—" }}</span>
+                  <span class="pill">count: {{ m.last_sync_count or "—" }}</span>
+                  <span class="muted">{{ m.last_sync_at or "" }}</span>
+                </div>
+                <form method="post" action="/actions/sync/{{ m.id }}" style="margin:0;">
+                  <button class="btn" type="submit">Синхронизировать</button>
+                </form>
+              </div>
+              {% if m.last_sync_error %}
+                <div class="err" style="margin-top:8px;">{{ m.last_sync_error }}</div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+
