@@ -1202,16 +1202,26 @@ def oauth2_google_callback(code: str | None = None, state: str | None = None) ->
         }
     }
     flow = Flow.from_client_config(client_config, scopes=GMAIL_SCOPES, redirect_uri=settings.gmail_oauth_redirect_uri)
+    fetch_err = None
     try:
         flow.fetch_token(code=code)
-    except Warning:
-        # oauthlib может "кинуть" Warning как исключение при расхождении scopes.
-        # Нам это не критично: token всё равно может быть получен.
-        pass
+    except Exception as e:
+        # oauthlib иногда поднимает Warning как Exception при "Scope has changed...".
+        # В таком случае токена может не быть — аккуратно отработаем без 500.
+        fetch_err = e
 
-    creds = flow.credentials
+    try:
+        creds = flow.credentials
+    except Exception:
+        # Если токена нет — не падаем 500, а возвращаемся в настройки с ошибкой.
+        if fetch_err:
+            log.warning(f"gmail_oauth_callback_error: {type(fetch_err).__name__}: {fetch_err}")
+        return RedirectResponse("/settings?gmail_error=oauth_no_token", status_code=303)
+
     if not getattr(creds, "token", None):
-        return RedirectResponse("/settings?gmail_error=oauth_scopes", status_code=303)
+        if fetch_err:
+            log.warning(f"gmail_oauth_callback_error: {type(fetch_err).__name__}: {fetch_err}")
+        return RedirectResponse("/settings?gmail_error=oauth_no_token", status_code=303)
 
     with session_scope() as s:
         mb = s.scalars(select(Mailbox).where(Mailbox.provider == "gmail")).first()
