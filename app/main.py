@@ -1661,9 +1661,14 @@ def action_ai_reset_empty_explanations() -> RedirectResponse:
 def action_sync_all() -> RedirectResponse:
     q = get_queue()
     with session_scope() as s:
-        mailboxes = list(
-            s.execute(select(Mailbox.id, Mailbox.provider).where(Mailbox.is_enabled == True))  # noqa: E712
-        )
+        now = dt.datetime.now(dt.UTC)
+        mailboxes = list(s.scalars(select(Mailbox).where(Mailbox.is_enabled == True)))  # noqa: E712
+        # Помечаем "queued" сразу, чтобы UI видел запуск даже если воркер/очередь временно недоступны.
+        for mb in mailboxes:
+            mb.last_sync_status = "queued"
+            mb.last_sync_error = None
+            mb.last_sync_count = 0
+            mb.last_sync_at = now
     for mailbox_id, provider in mailboxes:
         if provider == "gmail":
             q.enqueue(sync_gmail_mailbox, mailbox_id)
@@ -1679,7 +1684,13 @@ def api_sync_all() -> dict:
     """
     q = get_queue()
     with session_scope() as s:
-        mailboxes = list(s.execute(select(Mailbox.id, Mailbox.provider).where(Mailbox.is_enabled == True)))  # noqa: E712
+        now = dt.datetime.now(dt.UTC)
+        mailboxes = list(s.scalars(select(Mailbox).where(Mailbox.is_enabled == True)))  # noqa: E712
+        for mb in mailboxes:
+            mb.last_sync_status = "queued"
+            mb.last_sync_error = None
+            mb.last_sync_count = 0
+            mb.last_sync_at = now
     for mailbox_id, provider in mailboxes:
         if provider == "gmail":
             q.enqueue(sync_gmail_mailbox, mailbox_id)
@@ -1691,14 +1702,14 @@ def api_sync_all() -> dict:
 @app.get("/api/sync-status")
 def api_sync_status() -> dict:
     """
-    Статус синхронизации для UI: идет ли сейчас sync и когда была последняя успешная попытка.
+    Статус синхронизации для UI: идет ли сейчас sync и когда была последняя попытка.
     """
     syncing = False
     last_sync_at: dt.datetime | None = None
     with session_scope() as s:
         mbs = list(s.scalars(select(Mailbox).where(Mailbox.is_enabled == True)))  # noqa: E712
         for mb in mbs:
-            if mb.last_sync_status == "running":
+            if mb.last_sync_status in {"queued", "running"}:
                 syncing = True
             if mb.last_sync_at and (last_sync_at is None or mb.last_sync_at > last_sync_at):
                 last_sync_at = mb.last_sync_at
