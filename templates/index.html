@@ -363,7 +363,7 @@
             <button class="btn" type="submit">Синхронизировать</button>
           </form>
           {% if last_sync_at %}
-            <span class="pill">последняя синхр.: {{ last_sync_at|fmt_dt }}</span>
+            <span class="pill">последняя синхр.: <span data-dt="1" data-iso="{{ last_sync_at.isoformat() }}">…</span></span>
           {% else %}
             <span class="pill">синхр.: ещё не запускалась</span>
           {% endif %}
@@ -467,7 +467,7 @@
               </div>
               <div class="subject-line">
                 <a class="subject-text {% if not e.is_read %}unread{% endif %}" data-nav="1" href="/email/{{ e.id }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">{{ (e.subject or "(без темы)")|rfc2047 }}</a>
-                <div class="date">{% if e.date %}{{ e.date|fmt_dt }}{% endif %}</div>
+                <div class="date">{% if e.date %}<span data-dt="1" data-iso="{{ e.date.isoformat() }}">…</span>{% endif %}</div>
               </div>
               <div class="meta fromline">
                 <span class="avatar" data-avatar="1" data-from="{{ (e.from_email or '—')|rfc2047 }}">?</span>
@@ -578,7 +578,7 @@
           </div>
           <div class="subject-line">
             <a class="subject-text {% if not e.is_read %}unread{% endif %}" data-nav="1" href="/email/{{ e.id }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">{{ (e.subject or "(без темы)")|rfc2047 }}</a>
-            <div class="date">{% if e.date %}{{ e.date|fmt_dt }}{% endif %}</div>
+            <div class="date">{% if e.date %}<span data-dt="1" data-iso="{{ e.date.isoformat() }}">…</span>{% endif %}</div>
           </div>
           <div class="meta fromline">
             <span class="avatar" data-avatar="1" data-from="{{ (e.from_email or '—')|rfc2047 }}">?</span>
@@ -850,6 +850,23 @@
 
     <script>
       (function () {
+        function fmtIso(iso) {
+          try {
+            const d = new Date(iso);
+            if (Number.isNaN(d.getTime())) return "";
+            const wd = new Intl.DateTimeFormat("ru-RU", { weekday: "short" }).format(d);
+            const dtp = new Intl.DateTimeFormat("ru-RU", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" }).format(d);
+            return wd + ", " + dtp.replace(",", "");
+          } catch (_) {
+            return "";
+          }
+        }
+        document.querySelectorAll("[data-dt='1'][data-iso]").forEach((el) => {
+          const iso = el.getAttribute("data-iso") || "";
+          const t = fmtIso(iso);
+          if (t) el.textContent = t;
+        });
+
         // Страховка от "первый клик не перешёл": форсируем навигацию по ссылкам письма.
         document.addEventListener("click", (e) => {
           if (e.defaultPrevented) return;

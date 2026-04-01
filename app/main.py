@@ -7,7 +7,7 @@ import json
 from urllib.parse import urlparse
 from email.header import decode_header, make_header
 from email.utils import parseaddr
-from zoneinfo import ZoneInfo
+import time
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -79,12 +79,7 @@ def _fmt_dt_with_weekday(value: dt.datetime | None) -> str:
         # В БД чаще всего храним UTC; если tz отсутствует (naive) — считаем, что это UTC.
         if value.tzinfo is None:
             value = value.replace(tzinfo=dt.UTC)
-        tz = None
-        try:
-            tz = ZoneInfo(getattr(settings, "app_timezone", "Europe/Moscow") or "Europe/Moscow")
-        except Exception:
-            tz = None
-        local = value.astimezone(tz) if tz else value.astimezone()
+        local = value.astimezone()
         wd = _WEEKDAYS_RU[local.weekday()]
         return f"{wd}, {local.strftime('%d.%m.%Y %H:%M')}"
     except Exception:
@@ -96,6 +91,22 @@ def _fmt_dt_with_weekday(value: dt.datetime | None) -> str:
 
 
 templates.env.filters["fmt_dt"] = _fmt_dt_with_weekday
+
+
+@app.middleware("http")
+async def _slowlog_middleware(request: Request, call_next):
+    t0 = time.monotonic()
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        dt_ms = int((time.monotonic() - t0) * 1000)
+        # Логируем только подозрительно медленные запросы, чтобы поймать "зависания" на перезагрузке.
+        if dt_ms >= 1500:
+            try:
+                log.warning(f"slow_request {dt_ms}ms {request.method} {request.url.path}")
+            except Exception:
+                pass
 
 
 _LEARN_CONFIRM_N = 2
@@ -1191,9 +1202,16 @@ def oauth2_google_callback(code: str | None = None, state: str | None = None) ->
         }
     }
     flow = Flow.from_client_config(client_config, scopes=GMAIL_SCOPES, redirect_uri=settings.gmail_oauth_redirect_uri)
-    flow.fetch_token(code=code)
+    try:
+        flow.fetch_token(code=code)
+    except Warning:
+        # oauthlib может "кинуть" Warning как исключение при расхождении scopes.
+        # Нам это не критично: token всё равно может быть получен.
+        pass
 
     creds = flow.credentials
+    if not getattr(creds, "token", None):
+        return RedirectResponse("/settings?gmail_error=oauth_scopes", status_code=303)
 
     with session_scope() as s:
         mb = s.scalars(select(Mailbox).where(Mailbox.provider == "gmail")).first()

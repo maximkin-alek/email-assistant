@@ -175,7 +175,7 @@
           <span class="avatar" data-avatar="1" data-from="{{ (e.from_email or '—')|rfc2047 }}">?</span>
           <span class="pill">From</span>
           <span>{{ (e.from_email or "—")|rfc2047 }}</span>
-          {% if e.date %}<span class="pill">{{ e.date|fmt_dt }}</span>{% endif %}
+          {% if e.date %}<span class="pill"><span data-dt="1" data-iso="{{ e.date.isoformat() }}">…</span></span>{% endif %}
           {% if e.is_read %}<span class="pill ok" data-read-pill="1">прочитано</span>{% else %}<span class="pill warn" data-read-pill="1">не прочитано</span>{% endif %}
         </div>
 
@@ -240,6 +240,23 @@
 
     <script>
       (function () {
+        function fmtIso(iso) {
+          try {
+            const d = new Date(iso);
+            if (Number.isNaN(d.getTime())) return "";
+            const wd = new Intl.DateTimeFormat("ru-RU", { weekday: "short" }).format(d);
+            const dtp = new Intl.DateTimeFormat("ru-RU", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" }).format(d);
+            return wd + ", " + dtp.replace(",", "");
+          } catch (_) {
+            return "";
+          }
+        }
+        document.querySelectorAll("[data-dt='1'][data-iso]").forEach((el) => {
+          const iso = el.getAttribute("data-iso") || "";
+          const t = fmtIso(iso);
+          if (t) el.textContent = t;
+        });
+
         function qs(sel, root) { return (root || document).querySelector(sel); }
         function qsa(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
 

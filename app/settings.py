@@ -24,8 +24,6 @@ class Settings(BaseSettings):
     gmail_oauth_client_secret: str | None = None
     gmail_oauth_redirect_uri: str = "http://localhost:8000/oauth2/google/callback"
 
-    # Часовой пояс для UI (в контейнере часто UTC).
-    app_timezone: str = "Europe/Moscow"
 
     # AI (OpenAI-compatible)
     ai_base_url: str = "https://openrouter.ai/api/v1"
