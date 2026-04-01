@@ -363,9 +363,9 @@
             <button class="btn" type="submit" id="syncBtn">Синхронизировать</button>
           </form>
           {% if last_sync_at %}
-            <span class="pill" id="lastSyncPill">последняя синхр.: <span data-dt="1" data-iso="{{ last_sync_at.isoformat() }}">…</span></span>
+            <span class="pill" id="lastSyncPill" title="Последняя синхронизация">синк: <span data-dt="1" data-iso="{{ last_sync_at.isoformat() }}">…</span></span>
           {% else %}
-            <span class="pill" id="lastSyncPill">синхр.: ещё не запускалась</span>
+            <span class="pill" id="lastSyncPill" title="Последняя синхронизация">синк: —</span>
           {% endif %}
           <a class="btn primary" data-nav="1" href="/settings" style="display:inline-block;">Настройки</a>
         </div>
@@ -728,7 +728,9 @@
             </label>
             {% if e.category=='important' %}<span class="flag important">Важно</span>{% endif %}
             {% if not e.is_read %}<span class="flag unread">Непрочитано</span>{% endif %}
-            <span class="pill {% if e.category=='newsletter' %}teal{% elif e.category=='spam_candidate' %}danger{% else %}{% endif %}">{{ cat_ru.get(e.category or '', e.category or "—") }}</span>
+            {% if e.category != 'important' %}
+              <span class="pill {% if e.category=='newsletter' %}teal{% elif e.category=='spam_candidate' %}danger{% else %}{% endif %}">{{ cat_ru.get(e.category or '', e.category or "—") }}</span>
+            {% endif %}
             <span class="pill">Оценка: {{ e.score or "—" }}</span>
             <span class="pill">
               ящик:
@@ -994,7 +996,8 @@
                 if (st.syncing) continue;
                 if (pill) {
                   if (st.last_sync_at) {
-                    pill.innerHTML = "последняя синхр.: <span data-dt=\"1\" data-iso=\"" + st.last_sync_at + "\">…</span>";
+                    pill.title = "Последняя синхронизация";
+                    pill.innerHTML = "синк: <span data-dt=\"1\" data-iso=\"" + st.last_sync_at + "\">…</span>";
                     const el = pill.querySelector("[data-dt='1'][data-iso]");
                     if (el) {
                       const iso = el.getAttribute("data-iso") || "";
@@ -1002,7 +1005,8 @@
                       if (t) el.textContent = t;
                     }
                   } else {
-                    pill.textContent = "синхр.: ещё не запускалась";
+                    pill.title = "Последняя синхронизация";
+                    pill.textContent = "синк: —";
                   }
                 }
                 break;
