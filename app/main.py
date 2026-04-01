@@ -593,6 +593,7 @@ def index(
                     "top_score": (e.score or 0),
                     "top_hint": (e.ai_explanation or e.summary or e.snippet or "").strip()[:240],
                     "senders": [s for s in [_sender_short(e.from_email)] if s],
+                    "mailbox_ids": [e.mailbox_id] if e.mailbox_id else [],
                 }
             else:
                 c["count"] += 1
@@ -605,6 +606,9 @@ def index(
                 sshort = _sender_short(e.from_email)
                 if sshort and sshort not in c["senders"] and len(c["senders"]) < 3:
                     c["senders"].append(sshort)
+                mbid = e.mailbox_id
+                if mbid and mbid not in c.get("mailbox_ids", []) and len(c.get("mailbox_ids", [])) < 4:
+                    c.setdefault("mailbox_ids", []).append(mbid)
                 # top: хотим «самое полезное» письмо кластера
                 score = (e.score or 0)
                 cur = (c.get("top_score") or 0, 1 if c.get("unread") else 0, c.get("top_email_id") or 0)
@@ -996,6 +1000,7 @@ def api_day_summary_ai() -> dict:
                 "top_score": (e.score or 0),
                 "top_hint": (e.ai_explanation or e.summary or e.snippet or "").strip()[:240],
                 "senders": [s for s in [_sender_short(e.from_email)] if s],
+                "mailbox_ids": [e.mailbox_id] if e.mailbox_id else [],
             }
         else:
             c["count"] += 1
@@ -1008,6 +1013,9 @@ def api_day_summary_ai() -> dict:
             sshort = _sender_short(e.from_email)
             if sshort and sshort not in c["senders"] and len(c["senders"]) < 3:
                 c["senders"].append(sshort)
+            mbid = e.mailbox_id
+            if mbid and mbid not in c.get("mailbox_ids", []) and len(c.get("mailbox_ids", [])) < 4:
+                c.setdefault("mailbox_ids", []).append(mbid)
             score = (e.score or 0)
             cur = (c.get("top_score") or 0, (1 if c["unread"] > 0 else 0), c.get("top_email_id") or 0)
             cand = (score, (1 if not e.is_read else 0), e.id)

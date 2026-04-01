@@ -505,14 +505,31 @@
                       <span class="pill">Писем: {{ c.count }}</span>
                       {% if c.newsletter and c.newsletter > 0 %}<span class="pill teal">рассылки: {{ c.newsletter }}</span>{% endif %}
                       {% if c.senders and c.senders|length > 0 %}<span class="pill">от: {{ c.senders|join(", ") }}</span>{% endif %}
+                      <span class="pill">{% if c.kind == "thread" %}цепочка{% else %}тема{% endif %}</span>
+                      {% if c.mailbox_ids and c.mailbox_ids|length > 0 %}
+                        <span class="pill" style="display:flex; gap:6px; align-items:center;">
+                          ящики:
+                          {% for mid in c.mailbox_ids %}
+                            {% set mb = mailbox_map.get(mid) %}
+                            <span
+                              class="pill mb-dot"
+                              title="{% if mb %}{{ mb.name }} ({{ mb.provider }}){% else %}#{{ mid }}{% endif %}"
+                              data-mbcolor="{{ mailbox_colors.get(mid, '#94a3b8') }}"
+                              style="padding:0; width:12px; height:12px; border-radius:999px; border:1px solid rgba(15, 23, 42, 0.15);">
+                            </span>
+                          {% endfor %}
+                        </span>
+                      {% endif %}
                     </div>
                     <div class="subject-line">
-                      {% if c.kind == "thread" %}
-                        <a class="subject-text" href="{{ request.url.include_query_params(quick='today', thread=c.key, page='1') }}">Тред: {{ c.top_subject|rfc2047 }}</a>
-                      {% else %}
-                        <a class="subject-text" href="{{ request.url.include_query_params(quick='today', subj=c.key, page='1') }}">{{ c.top_subject|rfc2047 }}</a>
-                      {% endif %}
-                      <div class="date"><a class="btn" style="padding:6px 10px;" data-nav="1" href="/email/{{ c.top_email_id }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">Открыть пример</a></div>
+                      <a class="subject-text" data-nav="1" href="/email/{{ c.top_email_id }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">{{ c.top_subject|rfc2047 }}</a>
+                      <div class="date">
+                        {% if c.kind == "thread" %}
+                          <a class="btn" style="padding:6px 10px;" href="{{ request.url.include_query_params(quick='today', thread=c.key, page='1') }}">Показать цепочку</a>
+                        {% else %}
+                          <a class="btn" style="padding:6px 10px;" href="{{ request.url.include_query_params(quick='today', subj=c.key, page='1') }}">Показать тему</a>
+                        {% endif %}
+                      </div>
                     </div>
                   </div>
                 {% endfor %}
@@ -1250,6 +1267,13 @@
           // assign() чуть надёжнее на некоторых браузерах при быстрых кликах
           window.location.assign(href);
         }, true);
+
+        // Цветовые метки ящиков (в сводке дня и других местах).
+        document.querySelectorAll("[data-mbcolor]").forEach((el) => {
+          const c = el.getAttribute("data-mbcolor") || "";
+          if (!c) return;
+          el.style.background = c;
+        });
       })();
     </script>
   </body>
