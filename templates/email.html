@@ -98,6 +98,24 @@
       }
       .html img{ max-width: 100%; height: auto; }
       .html a{ word-break: break-word; }
+      /* Не допускаем горизонтальный скролл страницы из-за "широкого" HTML письма */
+      .html, .body{ max-width: 100%; }
+      .html *{ max-width: 100%; box-sizing: border-box; }
+      /* Таблицы часто ломают ширину — пусть скроллятся внутри блока */
+      .html table{
+        display: block;
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .html td, .html th{ overflow-wrap: anywhere; word-break: break-word; }
+      /* Длинные строки кода/преформат — скролл внутри, не на странице */
+      .html pre, .html code{
+        max-width: 100%;
+        overflow-x: auto;
+        white-space: pre;
+      }
+      .html pre{ padding: 10px; border: 1px solid var(--border); border-radius: 12px; background:#fff; }
       .actions{ margin-top: 12px; display:flex; gap: 8px; flex-wrap: wrap; }
       .ai-note{
         margin-top: 12px;
