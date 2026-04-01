@@ -1230,25 +1230,15 @@
 
         let inflight = false;
         let lastOkAt = 0;
-        let lastKey = "";
-        function currentKey() {
-          try {
-            const u = new URL(window.location.href);
-            // ключ зависит от текущих фильтров/ящика: digest должен соответствовать текущему view
-            return u.pathname + "?" + u.searchParams.toString();
-          } catch (_) { return String(Date.now()); }
-        }
+        const AUTO_KEY = "aiDigestAutoRan_v1";
 
         async function run(opts) {
           const o = opts || {};
-          const key = currentKey();
           const now = Date.now();
-          const sameKey = (key === lastKey);
           const fresh = (now - lastOkAt) < 60_000;
           if (!o.force && inflight) return;
-          if (!o.force && sameKey && fresh && card.style.display !== "none") return;
+          if (!o.force && fresh && card.style.display !== "none") return;
 
-          lastKey = key;
           inflight = true;
           setLoading(true, o.note || "Готовим AI-выжимку…");
           try {
@@ -1286,8 +1276,17 @@
         btn.addEventListener("click", () => run({ force: true, note: "Обновляем AI-выжимку…" }));
         if (hideBtn) hideBtn.addEventListener("click", () => { card.style.display = "none"; });
 
-        // Авто-выжимка при открытии (не блокирует UI).
-        setTimeout(() => run({}), 250);
+        // Авто-выжимка только при первом заходе в рамках вкладки/сессии браузера.
+        try {
+          const already = sessionStorage.getItem(AUTO_KEY) === "1";
+          if (!already) {
+            sessionStorage.setItem(AUTO_KEY, "1");
+            setTimeout(() => run({}), 250);
+          }
+        } catch (_) {
+          // если sessionStorage недоступен — ведём себя как раньше (один автозапуск)
+          setTimeout(() => run({}), 250);
+        }
 
         // Хук для обновления после refreshEmailList()
         window.__runAiDigest = function () {
