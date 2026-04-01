@@ -269,7 +269,9 @@
         bottom: 14px;
         z-index: 50;
         pointer-events: none;
+        display: none; /* показываем только когда есть выбор */
       }
+      .bulkbar.show{ display: block; }
       .bulkbar .panel{
         pointer-events: auto;
       }
@@ -625,6 +627,7 @@
       (function () {
         const checks = Array.from(document.querySelectorAll(".msg-check"));
         const countEl = document.getElementById("selCount");
+        const bulkbar = document.querySelector(".bulkbar");
         const allBtn = document.getElementById("selAllBtn");
         const noneBtn = document.getElementById("selNoneBtn");
         const unreadBtn = document.getElementById("selUnreadBtn");
@@ -639,6 +642,7 @@
           countEl.textContent = String(n);
           applyBtn.disabled = (n === 0);
           applyBtn.style.opacity = (n === 0) ? "0.55" : "1";
+          if (bulkbar) bulkbar.classList.toggle("show", n > 0);
         }
 
         function setAll(val) {
