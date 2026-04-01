@@ -467,7 +467,7 @@
               </div>
               <div class="subject-line">
                 <a class="subject-text {% if not e.is_read %}unread{% endif %}" data-nav="1" href="/email/{{ e.id }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">{{ (e.subject or "(без темы)")|rfc2047 }}</a>
-                <div class="date">{% if e.date %}<span data-dt="1" data-iso="{{ e.date.isoformat() }}">…</span>{% endif %}</div>
+                <div class="date">{% if e.date %}<span data-rel="1" data-iso="{{ e.date.isoformat() }}">…</span>{% endif %}</div>
               </div>
               <div class="meta fromline">
                 <span class="avatar" data-avatar="1" data-from="{{ (e.from_email or '—')|rfc2047 }}">?</span>
@@ -578,7 +578,7 @@
           </div>
           <div class="subject-line">
             <a class="subject-text {% if not e.is_read %}unread{% endif %}" data-nav="1" href="/email/{{ e.id }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">{{ (e.subject or "(без темы)")|rfc2047 }}</a>
-            <div class="date">{% if e.date %}<span data-dt="1" data-iso="{{ e.date.isoformat() }}">…</span>{% endif %}</div>
+            <div class="date">{% if e.date %}<span data-rel="1" data-iso="{{ e.date.isoformat() }}">…</span>{% endif %}</div>
           </div>
           <div class="meta fromline">
             <span class="avatar" data-avatar="1" data-from="{{ (e.from_email or '—')|rfc2047 }}">?</span>
@@ -861,10 +861,40 @@
             return "";
           }
         }
+        function relLabel(d) {
+          try {
+            const now = new Date();
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const startOfThat = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+            const diffDays = Math.round((startOfToday - startOfThat) / 86400000);
+            if (diffDays === 0) return "сегодня";
+            if (diffDays === 1) return "вчера";
+            // "на этой неделе" (по локали, неделя начинается с понедельника)
+            const day = (now.getDay() + 6) % 7; // Mon=0..Sun=6
+            const startOfWeek = new Date(startOfToday);
+            startOfWeek.setDate(startOfToday.getDate() - day);
+            if (d >= startOfWeek) return "на этой неделе";
+            return "давно";
+          } catch (_) {
+            return "";
+          }
+        }
+
+        // Полная дата (для last_sync и любых мест, где стоит data-dt)
         document.querySelectorAll("[data-dt='1'][data-iso]").forEach((el) => {
           const iso = el.getAttribute("data-iso") || "";
           const t = fmtIso(iso);
           if (t) el.textContent = t;
+        });
+        // Относительный ярлык вместо даты, а точную дату — в tooltip
+        document.querySelectorAll("[data-rel='1'][data-iso]").forEach((el) => {
+          const iso = el.getAttribute("data-iso") || "";
+          const d = new Date(iso);
+          if (Number.isNaN(d.getTime())) return;
+          const full = fmtIso(iso);
+          const rel = relLabel(d);
+          if (rel) el.textContent = rel;
+          if (full) el.title = full;
         });
 
         // Страховка от "первый клик не перешёл": форсируем навигацию по ссылкам письма.

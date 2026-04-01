@@ -41,6 +41,11 @@
         color: var(--text);
       }
       .btn:hover{ background:#fbfbfd; }
+      .btn.active{
+        border-color: rgba(37,99,235,.45);
+        background: rgba(37,99,235,.10);
+        box-shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(37,99,235,.10);
+      }
       .pill{
         padding: 3px 10px;
         border-radius: 999px;
@@ -185,15 +190,15 @@
           </form>
           <form method="post" action="/actions/email/{{ e.id }}/set-category?category=important" data-ajax="1" data-api="/api/email/{{ e.id }}/set-category" style="margin:0;">
             <input type="hidden" name="category" value="important" />
-            <button class="btn" type="submit">Важно</button>
+            <button class="btn {% if e.category=='important' %}active{% endif %}" type="submit">Важно</button>
           </form>
           <form method="post" action="/actions/email/{{ e.id }}/set-category?category=newsletter" data-ajax="1" data-api="/api/email/{{ e.id }}/set-category" style="margin:0;">
             <input type="hidden" name="category" value="newsletter" />
-            <button class="btn" type="submit">Рассылка</button>
+            <button class="btn {% if e.category=='newsletter' %}active{% endif %}" type="submit">Рассылка</button>
           </form>
           <form method="post" action="/actions/email/{{ e.id }}/set-category?category=spam_candidate" data-ajax="1" data-api="/api/email/{{ e.id }}/set-category" style="margin:0;">
             <input type="hidden" name="category" value="spam_candidate" />
-            <button class="btn" type="submit">Спам?</button>
+            <button class="btn {% if e.category=='spam_candidate' %}active{% endif %}" type="submit">Спам?</button>
           </form>
         </div>
 
