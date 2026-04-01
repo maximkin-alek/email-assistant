@@ -66,6 +66,17 @@
       }
       .btn.primary:hover{ filter: brightness(0.97); }
       .btn.ghost{ background: transparent; }
+      .btn.tiny{
+        padding: 6px 9px;
+        font-size: 12px;
+        font-weight: 800;
+        border-radius: 999px;
+      }
+      .btn.subtle{
+        background: rgba(15,23,42,.04);
+        border-color: rgba(148,163,184,.55);
+        color: rgba(15,23,42,.85);
+      }
       .input, .select{
         padding: 10px 12px;
         border: 1px solid var(--border);
@@ -504,7 +515,7 @@
               </div>
             </div>
             <div class="actions">
-              <button class="btn primary" type="button" id="aiDigestBtn">AI-выжимка дня</button>
+              <button class="btn tiny subtle" type="button" id="aiDigestBtn" title="Обновить AI-выжимку">AI</button>
               <form method="post" action="/api/day-summary" data-ajax="1" data-api="/api/day-summary" style="margin:0;">
                 <input type="hidden" name="action" value="mark_read_today_new" />
                 <input type="hidden" name="mailbox_id" value="{{ mailbox_id }}" />
@@ -815,6 +826,13 @@
               el.style.background = colorFor(from);
               el.title = from;
             });
+
+            // После обновления писем — фоново обновим AI-выжимку (если доступна на странице).
+            try {
+              if (typeof window.__runAiDigest === "function") {
+                setTimeout(() => window.__runAiDigest(), 250);
+              }
+            } catch (_) {}
           } catch (_) {
             // на ошибке — не зависаем, просто оставляем текущее
           } finally {
@@ -1149,6 +1167,18 @@
           if (errEl) { errEl.textContent = ""; errEl.style.display = "none"; }
         }
 
+        function setLoading(isLoading, note) {
+          if (isLoading) {
+            clear();
+            if (modelEl) modelEl.textContent = "…";
+            if (headEl) headEl.textContent = note || "Готовим AI-выжимку…";
+            if (bulletsEl) bulletsEl.innerHTML = "<li>Это может занять до 25 секунд.</li>";
+            if (errEl) { errEl.textContent = ""; errEl.style.display = "none"; }
+            card.style.display = "";
+          }
+          btn.disabled = !!isLoading;
+        }
+
         function render(digest) {
           clear();
           if (!digest) return;
@@ -1198,9 +1228,29 @@
           }
         }
 
-        async function run() {
-          btn.disabled = true;
-          btn.textContent = "AI-выжимка…";
+        let inflight = false;
+        let lastOkAt = 0;
+        let lastKey = "";
+        function currentKey() {
+          try {
+            const u = new URL(window.location.href);
+            // ключ зависит от текущих фильтров/ящика: digest должен соответствовать текущему view
+            return u.pathname + "?" + u.searchParams.toString();
+          } catch (_) { return String(Date.now()); }
+        }
+
+        async function run(opts) {
+          const o = opts || {};
+          const key = currentKey();
+          const now = Date.now();
+          const sameKey = (key === lastKey);
+          const fresh = (now - lastOkAt) < 60_000;
+          if (!o.force && inflight) return;
+          if (!o.force && sameKey && fresh && card.style.display !== "none") return;
+
+          lastKey = key;
+          inflight = true;
+          setLoading(true, o.note || "Готовим AI-выжимку…");
           try {
             const ctrl = new AbortController();
             const t = setTimeout(() => ctrl.abort(), 25000);
@@ -1219,6 +1269,7 @@
             if (!j || j.ok === false) throw new Error("api_error");
             render(j.digest || null);
             card.style.display = "";
+            lastOkAt = Date.now();
           } catch (e) {
             clear();
             const msg = (String(e && e.message) === "timeout")
@@ -1227,13 +1278,21 @@
             if (errEl) { errEl.style.display = ""; errEl.textContent = msg; }
             card.style.display = "";
           } finally {
-            btn.disabled = false;
-            btn.textContent = "AI-выжимка дня";
+            inflight = false;
+            setLoading(false);
           }
         }
 
-        btn.addEventListener("click", run);
+        btn.addEventListener("click", () => run({ force: true, note: "Обновляем AI-выжимку…" }));
         if (hideBtn) hideBtn.addEventListener("click", () => { card.style.display = "none"; });
+
+        // Авто-выжимка при открытии (не блокирует UI).
+        setTimeout(() => run({}), 250);
+
+        // Хук для обновления после refreshEmailList()
+        window.__runAiDigest = function () {
+          try { run({}); } catch (_) {}
+        };
       })();
     </script>
 
