@@ -717,6 +717,11 @@
           }
           const subj = card && qs(".subject-text", card);
           if (subj) subj.classList.remove("unread");
+          if (card) card.classList.remove("unread-card");
+          const flag = card && qs(".flag.unread", card);
+          if (flag) flag.remove();
+          const cbox = card && qs(".msg-check", card);
+          if (cbox) cbox.setAttribute("data-is-read", "1");
         }
 
         function setCategoryUI(card, category) {
@@ -729,6 +734,19 @@
             else if (category === "spam_candidate") pill.classList.add("danger");
             else pill.classList.add("ok");
           }
+        }
+
+        function clearBulkSelectionUI() {
+          document.querySelectorAll(".msg-check:checked").forEach((c) => { c.checked = false; });
+          const countEl = document.getElementById("selCount");
+          const applyBtn = document.getElementById("bulkApply");
+          const bulkbar = document.querySelector(".bulkbar");
+          if (countEl) countEl.textContent = "0";
+          if (applyBtn) {
+            applyBtn.disabled = true;
+            applyBtn.style.opacity = "0.55";
+          }
+          if (bulkbar) bulkbar.classList.remove("show");
         }
 
         // Делегированный перехват submit — надёжнее, чем навешивание на каждую форму.
@@ -764,7 +782,9 @@
                 if (data.action === "mark_read") setReadUI(el);
                 if (data.action === "set_category" && data.category) setCategoryUI(el, data.category);
               });
+              clearBulkSelectionUI();
             }
+            if (btn) btn.disabled = false;
           } catch (err) {
             if (btn) btn.disabled = false;
             alert("Не удалось выполнить действие. Попробуй ещё раз.");
