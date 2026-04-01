@@ -6,6 +6,7 @@ import re
 import json
 from urllib.parse import urlparse
 from email.header import decode_header, make_header
+from email.utils import parseaddr
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -88,6 +89,75 @@ def _fmt_dt_with_weekday(value: dt.datetime | None) -> str:
 
 
 templates.env.filters["fmt_dt"] = _fmt_dt_with_weekday
+
+
+_LEARN_CONFIRM_N = 2
+
+
+def _extract_sender_key(from_email: str | None) -> str:
+    raw = (from_email or "").strip()
+    _, addr = parseaddr(raw)
+    key = (addr or raw).strip().lower()
+    return key
+
+
+def _norm_lines(v: str) -> list[str]:
+    out: list[str] = []
+    for line in (v or "").splitlines():
+        x = line.strip()
+        if not x:
+            continue
+        if x not in out:
+            out.append(x)
+    return out[:500]
+
+
+def _learn_on_manual_category_change(
+    s,
+    *,
+    from_email: str | None,
+    category: str,
+) -> None:
+    """
+    "Обучение" без переобучения модели:
+    после N одинаковых ручных действий добавляем отправителя в мягкое правило.
+    """
+    if category not in {"important", "newsletter"}:
+        return
+
+    sender_key = _extract_sender_key(from_email)
+    if not sender_key:
+        return
+
+    cnt_key = f"learn_confirm:{category}"
+    cur = s.get(AppSetting, cnt_key)
+    try:
+        counts = json.loads(cur.value or "{}") if cur and cur.value else {}
+    except Exception:
+        counts = {}
+    if not isinstance(counts, dict):
+        counts = {}
+
+    n = int(counts.get(sender_key) or 0) + 1
+    counts[sender_key] = n
+    if not cur:
+        s.add(AppSetting(key=cnt_key, value=json.dumps(counts, ensure_ascii=False)))
+    else:
+        cur.value = json.dumps(counts, ensure_ascii=False)
+
+    if n < _LEARN_CONFIRM_N:
+        return
+
+    rule_key = "sender_whitelist" if category == "important" else "sender_blacklist"
+    rule = s.get(AppSetting, rule_key)
+    lines = _norm_lines(rule.value if rule else "")
+    if sender_key not in lines:
+        lines.append(sender_key)
+        new_val = "\n".join(lines[:200])
+        if not rule:
+            s.add(AppSetting(key=rule_key, value=new_val))
+        else:
+            rule.value = new_val
 
 
 def _extract_links(text: str | None, limit: int = 20) -> list[str]:
@@ -636,7 +706,10 @@ def action_set_category(email_id: int, category: str) -> RedirectResponse:
     if category not in {"important", "normal", "newsletter", "spam_candidate"}:
         return RedirectResponse("/", status_code=303)
     with session_scope() as s:
-        s.execute(update(EmailMessage).where(EmailMessage.id == email_id).values(category=category))
+        msg = s.get(EmailMessage, email_id)
+        if msg:
+            msg.category = category
+            _learn_on_manual_category_change(s, from_email=msg.from_email, category=category)
     return RedirectResponse("/", status_code=303)
 
 
@@ -645,7 +718,11 @@ def api_set_category(email_id: int, category: str = Form(...)) -> dict:
     if category not in {"important", "normal", "newsletter", "spam_candidate"}:
         return {"ok": False, "error": "invalid_category"}
     with session_scope() as s:
-        s.execute(update(EmailMessage).where(EmailMessage.id == email_id).values(category=category))
+        msg = s.get(EmailMessage, email_id)
+        if not msg:
+            return {"ok": False, "error": "not_found"}
+        msg.category = category
+        _learn_on_manual_category_change(s, from_email=msg.from_email, category=category)
     return {"ok": True, "email_id": email_id, "category": category}
 
 
@@ -680,7 +757,10 @@ def action_bulk(
             s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(is_archived=False))
         elif action == "set_category":
             if category in {"important", "normal", "newsletter", "spam_candidate"}:
-                s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(category=category))
+                msgs = list(s.scalars(select(EmailMessage).where(EmailMessage.id.in_(ids))))
+                for msg in msgs:
+                    msg.category = category
+                    _learn_on_manual_category_change(s, from_email=msg.from_email, category=category)
     return RedirectResponse("/", status_code=303)
 
 
@@ -706,8 +786,11 @@ def api_bulk(
             updated = ids
         elif action == "set_category":
             if category in {"important", "normal", "newsletter", "spam_candidate"}:
-                s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(category=category))
-                updated = ids
+                msgs = list(s.scalars(select(EmailMessage).where(EmailMessage.id.in_(ids))))
+                for msg in msgs:
+                    msg.category = category
+                    _learn_on_manual_category_change(s, from_email=msg.from_email, category=category)
+                updated = [m.id for m in msgs]
             else:
                 return {"ok": False, "error": "invalid_category"}
     return {"ok": True, "updated": updated, "archived": archived, "action": action, "category": category}
