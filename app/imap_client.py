@@ -102,6 +102,17 @@ class ImapSession:
                                         flags.add(f.strip())
         return raw, flags
 
+    def mark_seen(self, uid: int) -> bool:
+        """
+        Пометить письмо как прочитанное (UID STORE +FLAGS \\Seen).
+        """
+        assert self.imap is not None
+        try:
+            status, _ = self.imap.uid("store", str(uid), "+FLAGS", "(\\Seen)")
+            return status == "OK"
+        except Exception:
+            return False
+
 
 def fetch_new_uids(cfg: ImapConfig, last_uid: int | None, limit: int = 50) -> list[int]:
     with ImapSession(cfg) as s:

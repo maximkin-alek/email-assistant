@@ -29,6 +29,7 @@ from app.jobs import (
     ai_retry_frozen_assignment_errors,
     ai_test_model,
     recompute_all_basic,
+    sync_remote_mark_read,
     sync_gmail_mailbox,
     sync_imap_mailbox,
 )
@@ -682,6 +683,9 @@ def api_today_group(
             return {"ok": True, "updated": [], "archived": [], "action": action}
         if action == "mark_read":
             s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(is_read=True))
+            q = get_queue()
+            for eid in ids:
+                q.enqueue(sync_remote_mark_read, eid)
             return {"ok": True, "updated": ids, "archived": [], "action": "mark_read"}
         s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(is_archived=True))
         return {"ok": True, "updated": [], "archived": ids, "action": "archive"}
@@ -730,6 +734,7 @@ def api_set_category(email_id: int, category: str = Form(...)) -> dict:
 def action_mark_read(email_id: int) -> RedirectResponse:
     with session_scope() as s:
         s.execute(update(EmailMessage).where(EmailMessage.id == email_id).values(is_read=True))
+    get_queue().enqueue(sync_remote_mark_read, email_id)
     return RedirectResponse("/", status_code=303)
 
 
@@ -737,6 +742,7 @@ def action_mark_read(email_id: int) -> RedirectResponse:
 def api_mark_read(email_id: int) -> dict:
     with session_scope() as s:
         s.execute(update(EmailMessage).where(EmailMessage.id == email_id).values(is_read=True))
+    get_queue().enqueue(sync_remote_mark_read, email_id)
     return {"ok": True, "email_id": email_id}
 
 
@@ -751,6 +757,9 @@ def action_bulk(
     with session_scope() as s:
         if action == "mark_read":
             s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(is_read=True))
+            q = get_queue()
+            for eid in ids:
+                q.enqueue(sync_remote_mark_read, eid)
         elif action == "archive":
             s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(is_archived=True))
         elif action == "unarchive":
@@ -778,6 +787,9 @@ def api_bulk(
         if action == "mark_read":
             s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(is_read=True))
             updated = ids
+            q = get_queue()
+            for eid in ids:
+                q.enqueue(sync_remote_mark_read, eid)
         elif action == "archive":
             s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(is_archived=True))
             archived = ids
@@ -805,6 +817,7 @@ def email_view(request: Request, email_id: int) -> HTMLResponse:
         # Открытие письма = просмотр. Помечаем прочитанным.
         if not msg.is_read:
             msg.is_read = True
+            get_queue().enqueue(sync_remote_mark_read, msg.id)
         mb = s.get(Mailbox, msg.mailbox_id)
 
         # prev/next в контексте фильтров (если пришли со списка)

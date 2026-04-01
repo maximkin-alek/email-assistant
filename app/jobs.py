@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app.db import session_scope
 from app.crypto import decrypt_str, encrypt_str
 import json
+from google.oauth2.credentials import Credentials
 
 from app.email_parsing import extract_attachments_from_eml, parse_eml
 from app.gmail_client import (
@@ -34,6 +35,63 @@ from app.app_state import (
 from app.queue import get_queue
 from app.settings import settings
 from rq.registry import DeferredJobRegistry, FailedJobRegistry, FinishedJobRegistry, ScheduledJobRegistry, StartedJobRegistry
+
+
+def sync_remote_mark_read(email_id: int) -> None:
+    """
+    Синхронизация статуса "прочитано" обратно в оригинальный ящик.
+    Gmail: removeLabelIds=["UNREAD"]
+    IMAP: UID STORE +FLAGS (\\Seen)
+    """
+    with session_scope() as s:
+        msg = s.get(EmailMessage, email_id)
+        if not msg:
+            return
+        if not msg.is_read:
+            return
+        mb = s.get(Mailbox, msg.mailbox_id)
+        if not mb or not mb.is_enabled:
+            return
+
+        if mb.provider == "imap":
+            # Мы умеем помечать прочитанным только если provider_message_id содержит UID.
+            pmid = (msg.provider_message_id or "").strip().lower()
+            uid = None
+            if pmid.startswith("uid:"):
+                tail = pmid.split(":", 1)[1].strip()
+                if tail.isdigit():
+                    uid = int(tail)
+            if not uid:
+                return
+            if not (mb.imap_host_enc and mb.imap_user_enc and mb.imap_password_enc and mb.imap_port):
+                return
+            cfg = ImapConfig(
+                host=decrypt_str(mb.imap_host_enc),
+                port=int(mb.imap_port),
+                username=decrypt_str(mb.imap_user_enc),
+                password=decrypt_str(mb.imap_password_enc),
+                folder=mb.imap_folder or "INBOX",
+            )
+            try:
+                with ImapSession(cfg) as imap:
+                    imap.mark_seen(uid)
+            except Exception:
+                return
+
+        elif mb.provider == "gmail":
+            if not mb.gmail_credentials_enc:
+                return
+            try:
+                creds = Credentials.from_authorized_user_info(info=__import__("json").loads(decrypt_str(mb.gmail_credentials_enc)))
+                service = build_gmail_service(creds)
+                service.users().messages().modify(userId="me", id=msg.provider_message_id, body={"removeLabelIds": ["UNREAD"]}).execute()
+                # если токен обновился — сохраним обратно
+                with session_scope() as s2:
+                    mb2 = s2.get(Mailbox, mb.id)
+                    if mb2:
+                        mb2.gmail_credentials_enc = encrypt_str(creds.to_json())
+            except Exception:
+                return
 
 
 def classify_basic(email_id: int) -> None:

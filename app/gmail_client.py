@@ -11,7 +11,9 @@ from bs4 import BeautifulSoup
 from app.email_parsing import _extract_links_from_text, _extract_links_and_images_from_html, _html_to_text
 
 
-GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+# Нужно для синхронизации статуса прочитано/не прочитано обратно в Gmail.
+# Если раньше Gmail был подключен с readonly — потребуется переподключить аккаунт.
+GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 
 
 @dataclass(frozen=True)
