@@ -349,6 +349,55 @@
         justify-content: space-between;
         flex-wrap: wrap;
       }
+
+      /* Responsive polish */
+      @media (max-width: 640px) {
+        .top > div:last-child{
+          width: 100%;
+          justify-content: flex-start;
+        }
+      }
+      @media (max-width: 480px) {
+        .toolbar form{
+          flex-direction: column;
+          align-items: stretch !important;
+        }
+        .toolbar form .input{
+          min-width: 0 !important;
+          width: 100%;
+        }
+        .toolbar form .btn{
+          width: 100%;
+        }
+      }
+      @media (max-width: 768px) {
+        .section-hdr{
+          flex-direction: column;
+          align-items: flex-start !important;
+        }
+        .section-hdr .actions{
+          width: 100%;
+        }
+        .section-hdr .actions .btn{
+          flex: 1 1 auto;
+          min-width: 0;
+          white-space: normal;
+        }
+        .bulkrow{
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .bulkrow .left, .bulkrow .right{
+          width: 100%;
+          justify-content: flex-start;
+        }
+        .bulkrow .right{
+          flex-direction: column;
+        }
+        .bulkrow .right .select, .bulkrow .right .btn{
+          width: 100%;
+        }
+      }
     </style>
   </head>
   <body>

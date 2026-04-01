@@ -62,6 +62,30 @@
       details.helpbox { margin-top: 10px; }
       details.helpbox > summary { cursor: pointer; color:#666; }
       details.helpbox .inner { margin-top: 8px; color:#111; font-size: 13px; line-height: 1.35; }
+
+      .btnhelp{ display:inline-flex; gap: 6px; align-items:center; flex-wrap: nowrap; }
+      .btnhelp form{ margin:0; }
+
+      @media (max-width: 640px) {
+        .top > div:last-child{ width: 100%; }
+        .top > div:last-child .btnhelp{ width: 100%; }
+        .top > div:last-child .btnhelp .btn{ flex: 1 1 auto; width: 100%; }
+      }
+      @media (max-width: 768px) {
+        .card .meta{ align-items: flex-start; }
+        .card .meta > div[style*="justify-content: space-between"]{
+          justify-content: flex-start !important;
+        }
+        .card .meta > div[style*="display:flex"][style*="gap:8px"]{
+          width: 100%;
+        }
+        .card .meta > div[style*="display:flex"][style*="gap:8px"] .btnhelp{
+          width: 100%;
+        }
+        .card .meta > div[style*="display:flex"][style*="gap:8px"] .btnhelp .btn{
+          width: 100%;
+        }
+      }
     </style>
   </head>
   <body>
@@ -71,20 +95,26 @@
         <div class="title">Настройки</div>
         <div class="muted">Подключения, синхронизация и тест AI-модели.</div>
       </div>
-      <div style="display:flex; gap: 8px; flex-wrap: wrap;">
+      <div style="display:flex; gap: 8px; flex-wrap: wrap; align-items:center;">
         <a class="btn" href="/">← Входящие</a>
-        <form method="post" action="/actions/mailbox/import-env" style="margin:0;">
-          <button class="btn" type="submit">Импортировать ящики из .env</button>
-        </form>
-        <span class="help" tabindex="0" data-tip="Создаёт IMAP‑ящики из переменных YANDEX_IMAP_* / MAILRU_IMAP_* в .env.\nУдобно при миграции: не нужно вводить логины/пароли вручную.">?</span>
-        <form method="post" action="/actions/mailbox/add-gmail" style="margin:0;">
-          <button class="btn" type="submit">Добавить Gmail</button>
-        </form>
-        <span class="help" tabindex="0" data-tip="Запускает OAuth‑подключение Gmail.\nЕсли ты уже подключал этот Gmail, приложение постарается не создавать дубль.">?</span>
-        <form method="post" action="/actions/recompute" style="margin:0;">
-          <button class="btn" type="submit">Пересчитать базовую классификацию</button>
-        </form>
-        <span class="help" tabindex="0" data-tip="Быстрый пересчёт базовых правил (без AI): важность/рассылки по эвристикам и твоим правилам.\nПолезно после изменения правил секретаря.">?</span>
+        <div class="btnhelp">
+          <form method="post" action="/actions/mailbox/import-env">
+            <button class="btn" type="submit">Импортировать ящики из .env</button>
+          </form>
+          <span class="help" tabindex="0" data-tip="Создаёт IMAP‑ящики из переменных YANDEX_IMAP_* / MAILRU_IMAP_* в .env.\nУдобно при миграции: не нужно вводить логины/пароли вручную.">?</span>
+        </div>
+        <div class="btnhelp">
+          <form method="post" action="/actions/mailbox/add-gmail">
+            <button class="btn" type="submit">Добавить Gmail</button>
+          </form>
+          <span class="help" tabindex="0" data-tip="Запускает OAuth‑подключение Gmail.\nЕсли ты уже подключал этот Gmail, приложение постарается не создавать дубль.">?</span>
+        </div>
+        <div class="btnhelp">
+          <form method="post" action="/actions/recompute">
+            <button class="btn" type="submit">Пересчитать базовую классификацию</button>
+          </form>
+          <span class="help" tabindex="0" data-tip="Быстрый пересчёт базовых правил (без AI): важность/рассылки по эвристикам и твоим правилам.\nПолезно после изменения правил секретаря.">?</span>
+        </div>
       </div>
     </div>
 
@@ -191,15 +221,19 @@
             <span class="pill">AI model</span>
             <span class="pill">{{ ai_model }}</span>
           </div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <form method="post" action="/actions/ai-run" style="margin:0;">
-              <button class="btn" type="submit">Запустить AI обработку</button>
-            </form>
-            <span class="help" tabindex="0" data-tip="Поставит в очередь AI‑обработку писем (summary/объяснения/категории).\nМонитор ниже покажет прогресс и состояние очереди.">?</span>
-            <form method="post" action="/actions/ai-stop" style="margin:0;">
-              <button class="btn" type="submit">Остановить</button>
-            </form>
-            <span class="help" tabindex="0" data-tip="Останавливает текущий прогон AI.\nПолезно, если хочешь сменить модель/ключ или разгрузить систему.">?</span>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <div class="btnhelp">
+              <form method="post" action="/actions/ai-run">
+                <button class="btn" type="submit">Запустить AI обработку</button>
+              </form>
+              <span class="help" tabindex="0" data-tip="Поставит в очередь AI‑обработку писем (summary/объяснения/категории).\nМонитор ниже покажет прогресс и состояние очереди.">?</span>
+            </div>
+            <div class="btnhelp">
+              <form method="post" action="/actions/ai-stop">
+                <button class="btn" type="submit">Остановить</button>
+              </form>
+              <span class="help" tabindex="0" data-tip="Останавливает текущий прогон AI.\nПолезно, если хочешь сменить модель/ключ или разгрузить систему.">?</span>
+            </div>
           </div>
         </div>
 
@@ -400,25 +434,33 @@
                   <span class="pill">count: {{ m.last_sync_count or "—" }}</span>
                   <span class="muted">{{ m.last_sync_at or "" }}</span>
                 </div>
-                <div style="display:flex; gap:8px;">
-                  <form method="post" action="/actions/sync/{{ m.id }}" style="margin:0;">
-                    <button class="btn" type="submit">Синхронизировать</button>
-                  </form>
-                  <span class="help" tabindex="0" data-tip="Синхронизирует только этот ящик.\nПолезно после подключения или если у одного ящика ошибка.">?</span>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                  <div class="btnhelp">
+                    <form method="post" action="/actions/sync/{{ m.id }}">
+                      <button class="btn" type="submit">Синхронизировать</button>
+                    </form>
+                    <span class="help" tabindex="0" data-tip="Синхронизирует только этот ящик.\nПолезно после подключения или если у одного ящика ошибка.">?</span>
+                  </div>
                 {% if m.provider == 'imap' %}
-                  <form method="post" action="/actions/mailbox/tls-verify/{{ m.id }}" style="margin:0;">
-                    <button class="btn" type="submit">{% if m.imap_tls_verify %}TLS verify off{% else %}TLS verify on{% endif %}</button>
-                  </form>
-                  <span class="help" tabindex="0" data-tip="Если включено (on) — проверяем TLS‑сертификат сервера (рекомендуется).\nЕсли VPN/антивирус подменяет сертификат и IMAP падает с CERTIFICATE_VERIFY_FAILED — можно выключить.">?</span>
+                  <div class="btnhelp">
+                    <form method="post" action="/actions/mailbox/tls-verify/{{ m.id }}">
+                      <button class="btn" type="submit">{% if m.imap_tls_verify %}TLS verify off{% else %}TLS verify on{% endif %}</button>
+                    </form>
+                    <span class="help" tabindex="0" data-tip="Если включено (on) — проверяем TLS‑сертификат сервера (рекомендуется).\nЕсли VPN/антивирус подменяет сертификат и IMAP падает с CERTIFICATE_VERIFY_FAILED — можно выключить.">?</span>
+                  </div>
                 {% endif %}
-                  <form method="post" action="/actions/mailbox/toggle/{{ m.id }}" style="margin:0;">
-                    <button class="btn" type="submit">{% if m.is_enabled %}Выключить{% else %}Включить{% endif %}</button>
-                  </form>
-                  <span class="help" tabindex="0" data-tip="Выключенный ящик не синхронизируется и не участвует в «Синхронизировать всё».\nПисьма в базе при этом остаются.">?</span>
-                  <form method="post" action="/actions/mailbox/delete/{{ m.id }}" style="margin:0;" onsubmit="return confirm('Удалить ящик и все письма из него?');">
-                    <button class="btn" type="submit" style="border-color:#fecaca; color:#991b1b;">Удалить</button>
-                  </form>
-                  <span class="help" tabindex="0" data-tip="Удаляет ящик и ВСЕ письма/вложения этого ящика из базы.\nДействие необратимо.">?</span>
+                  <div class="btnhelp">
+                    <form method="post" action="/actions/mailbox/toggle/{{ m.id }}">
+                      <button class="btn" type="submit">{% if m.is_enabled %}Выключить{% else %}Включить{% endif %}</button>
+                    </form>
+                    <span class="help" tabindex="0" data-tip="Выключенный ящик не синхронизируется и не участвует в «Синхронизировать всё».\nПисьма в базе при этом остаются.">?</span>
+                  </div>
+                  <div class="btnhelp">
+                    <form method="post" action="/actions/mailbox/delete/{{ m.id }}" onsubmit="return confirm('Удалить ящик и все письма из него?');">
+                      <button class="btn" type="submit" style="border-color:#fecaca; color:#991b1b;">Удалить</button>
+                    </form>
+                    <span class="help" tabindex="0" data-tip="Удаляет ящик и ВСЕ письма/вложения этого ящика из базы.\nДействие необратимо.">?</span>
+                  </div>
                 </div>
               </div>
               {% if m.last_sync_error %}

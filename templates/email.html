@@ -122,6 +122,13 @@
       }
       .html pre{ padding: 10px; border: 1px solid var(--border); border-radius: 12px; background:#fff; }
       .actions{ margin-top: 12px; display:flex; gap: 8px; flex-wrap: wrap; }
+      @media (max-width: 480px) {
+        .top{
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .top > div{ width: 100%; }
+      }
       .ai-note{
         margin-top: 12px;
         padding: 10px 12px;
