@@ -73,6 +73,9 @@ def _fmt_dt_with_weekday(value: dt.datetime | None) -> str:
     if not value:
         return ""
     try:
+        # В БД чаще всего храним UTC; если tz отсутствует (naive) — считаем, что это UTC.
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=dt.UTC)
         local = value.astimezone()
         wd = _WEEKDAYS_RU[local.weekday()]
         return f"{wd}, {local.strftime('%d.%m.%Y %H:%M')}"
@@ -342,19 +345,35 @@ def index(
     sort: str | None = None,
     thread: str | None = None,
     subj: str | None = None,
+    view: str | None = None,
 ) -> HTMLResponse:
     with session_scope() as s:
         mailboxes = list(s.scalars(select(Mailbox).order_by(Mailbox.id.asc())))
         mailbox_map = {m.id: m for m in mailboxes}
+        # Цвета ящиков для UI (табы + полоска слева).
+        palette = [
+            "#2563eb",  # blue
+            "#7c3aed",  # violet
+            "#0f766e",  # teal
+            "#b45309",  # amber
+            "#b42318",  # red
+            "#0e7490",  # cyan
+            "#4338ca",  # indigo
+            "#16a34a",  # green
+        ]
+        mailbox_colors = {m.id: palette[(m.id - 1) % len(palette)] for m in mailboxes}
         last_sync_at = None
         for m in mailboxes:
             if m.last_sync_at and (last_sync_at is None or m.last_sync_at > last_sync_at):
                 last_sync_at = m.last_sync_at
 
-        base_qry = select(EmailMessage).where(EmailMessage.is_archived == False)  # noqa: E712
+        view_v = (view or "").strip().lower()
+        archived_view = view_v in {"archive", "archived"}
+
+        base_qry = select(EmailMessage).where(EmailMessage.is_archived == (True if archived_view else False))  # noqa: E712
         qry = (
             select(EmailMessage)
-            .where(EmailMessage.is_archived == False)  # noqa: E712
+            .where(EmailMessage.is_archived == (True if archived_view else False))  # noqa: E712
             .limit(200)
         )
         if thread and thread.strip():
@@ -451,6 +470,35 @@ def index(
         # Удобно строить ссылки с сохранением текущих параметров.
         return str(request.url.include_query_params(**kwargs))
 
+    view_tabs = [
+        {"id": "", "name": "Входящие", "href": _u(view="")},
+        {"id": "archive", "name": "Архив", "href": _u(view="archive")},
+    ]
+
+    mailbox_tabs = [{"id": "", "name": "Все", "color": "#64748b", "href": _u(mailbox_id="")}]
+    for m in mailboxes:
+        mailbox_tabs.append(
+            {
+                "id": str(m.id),
+                "name": m.name,
+                "color": mailbox_colors.get(m.id, "#64748b"),
+                "href": _u(mailbox_id=str(m.id)),
+            }
+        )
+
+    category_tabs = [
+        {"id": "", "name": "Все", "href": _u(category="")},
+        {"id": "important", "name": cat_ru["important"], "href": _u(category="important")},
+        {"id": "normal", "name": cat_ru["normal"], "href": _u(category="normal")},
+        {"id": "newsletter", "name": cat_ru["newsletter"], "href": _u(category="newsletter")},
+        {"id": "spam_candidate", "name": cat_ru["spam_candidate"], "href": _u(category="spam_candidate")},
+    ]
+
+    sort_tabs = [
+        {"id": "date", "name": "По дате", "href": _u(sort="date")},
+        {"id": "score", "name": "По важности", "href": _u(sort="score")},
+    ]
+
     quick_links = {
         "unread": _u(quick="unread"),
         "important": _u(quick="important"),
@@ -497,7 +545,14 @@ def index(
             "cat_ru": cat_ru,
             "mailboxes": mailboxes,
             "mailbox_map": mailbox_map,
+            "mailbox_colors": mailbox_colors,
             "mailbox_id": mailbox_id_int or "",
+            "mailbox_tabs": mailbox_tabs,
+            "view": view_v,
+            "archived_view": archived_view,
+            "view_tabs": view_tabs,
+            "category_tabs": category_tabs,
+            "sort_tabs": sort_tabs,
             "search_q": q or "",
             "unread_only": unread_only,
             "quick": (quick or "").strip().lower(),
@@ -621,6 +676,8 @@ def action_bulk(
             s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(is_read=True))
         elif action == "archive":
             s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(is_archived=True))
+        elif action == "unarchive":
+            s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(is_archived=False))
         elif action == "set_category":
             if category in {"important", "normal", "newsletter", "spam_candidate"}:
                 s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(category=category))
@@ -644,6 +701,9 @@ def api_bulk(
         elif action == "archive":
             s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(is_archived=True))
             archived = ids
+        elif action == "unarchive":
+            s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(is_archived=False))
+            updated = ids
         elif action == "set_category":
             if category in {"important", "normal", "newsletter", "spam_candidate"}:
                 s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(category=category))

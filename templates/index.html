@@ -94,38 +94,85 @@
         background: var(--card);
         box-shadow: var(--shadow);
         width: 100%;
+        position: relative;
+        overflow: hidden;
       }
-      .card.important{
-        border-color: rgba(180,83,9,.35);
-        background: linear-gradient(0deg, #ffffff 0%, var(--warn-weak) 100%);
+      /* Полоса слева = цвет ящика */
+      .card::after{
+        content:"";
+        position:absolute;
+        left:-1px; top:-1px; bottom:-1px;
+        width: 4px;
+        border-radius: var(--radius) 0 0 var(--radius);
+        background: var(--mb, #94a3b8);
       }
+      /* Непрочитанное — фон + рамка */
       .card.unread-card{
+        border-color: rgba(37,99,235,.30);
+        background: linear-gradient(0deg, rgba(37,99,235,.08), rgba(37,99,235,.04));
+        box-shadow: 0 1px 2px rgba(16,24,40,.06), 0 10px 30px rgba(37,99,235,.10);
+      }
+      /* Категории — подсветка (мягко) */
+      .card.cat-important{
+        border-color: rgba(180,83,9,.35);
+        background: linear-gradient(0deg, rgba(245,158,11,.12), rgba(245,158,11,.05));
+      }
+      .card.cat-newsletter{ border-color: rgba(15,118,110,.22); background: rgba(15,118,110,.04); }
+      .card.cat-spam{ border-color: rgba(180,35,24,.22); background: rgba(180,35,24,.04); }
+
+      .flag{
+        display:inline-flex;
+        align-items:center;
+        gap: 8px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 950;
+        letter-spacing: .01em;
+        border: 1px solid rgba(0,0,0,.06);
+        background: #fff;
+      }
+      .flag.important{
+        color: #7a2d0a;
+        background: linear-gradient(0deg, rgba(245,158,11,.22), rgba(245,158,11,.10));
+        border-color: rgba(245,158,11,.35);
+      }
+      .flag.important::before{ content:"★"; }
+      .flag.unread{
+        color: #0b3bdb;
+        background: rgba(37,99,235,.10);
+        border-color: rgba(37,99,235,.25);
+      }
+      .flag.unread::before{ content:"●"; font-size: 10px; }
+
+      .tabs{
+        display:flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items:center;
+      }
+      .tab{
+        display:inline-flex;
+        align-items:center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: #fff;
+        color: var(--text);
+        font-weight: 750;
+        font-size: 13px;
+      }
+      .tab:hover{ background: #fbfbfd; text-decoration: none; }
+      .tab.active{
         border-color: rgba(37,99,235,.35);
-        box-shadow: 0 1px 2px rgba(16,24,40,.06), 0 10px 30px rgba(37,99,235,.12);
+        background: rgba(37,99,235,.08);
       }
-      .card.important::before,
-      .card.unread-card::before{
-        content:"";
-        display:block;
-        height: 0;
-      }
-      .card.important{ position: relative; }
-      .card.unread-card{ position: relative; }
-      .card.important::after{
-        content:"";
-        position:absolute;
-        left:-1px; top:-1px; bottom:-1px;
-        width: 4px;
-        border-radius: var(--radius) 0 0 var(--radius);
-        background: linear-gradient(180deg, #f59e0b, #ef4444);
-      }
-      .card.unread-card::after{
-        content:"";
-        position:absolute;
-        left:-1px; top:-1px; bottom:-1px;
-        width: 4px;
-        border-radius: var(--radius) 0 0 var(--radius);
-        background: linear-gradient(180deg, #60a5fa, #2563eb);
+      .dot{
+        width: 10px; height: 10px;
+        border-radius: 999px;
+        background: var(--dot, #94a3b8);
+        box-shadow: 0 0 0 3px rgba(0,0,0,.03) inset;
       }
       .meta{ display:flex; gap: 10px; align-items:center; flex-wrap:wrap; color: var(--muted); font-size: 13px; }
       .row{ display:flex; gap: 10px; align-items:center; }
@@ -216,6 +263,8 @@
         margin: 0 auto;
         padding: 0 18px;
       }
+      /* чтобы закреплённая панель не загораживала низ */
+      .container{ padding-bottom: 120px; }
       .bulkrow{
         display:flex;
         gap: 10px;
@@ -256,11 +305,11 @@
         margin-top: 14px;
         padding: 14px;
         border-radius: 18px;
-        border: 1px solid rgba(124,58,237,.25);
+        border: 2px solid rgba(124,58,237,.35);
         background: radial-gradient(1200px 200px at 10% 0%, rgba(124,58,237,.18), rgba(124,58,237,0) 60%),
                     radial-gradient(900px 200px at 90% 0%, rgba(37,99,235,.14), rgba(37,99,235,0) 60%),
                     #ffffff;
-        box-shadow: 0 10px 30px rgba(124,58,237,.10), var(--shadow);
+        box-shadow: 0 14px 36px rgba(124,58,237,.16), var(--shadow);
       }
       .section-hdr{ display:flex; gap: 10px; align-items: baseline; justify-content: space-between; flex-wrap: wrap; }
       .section-title{ font-size: 16px; font-weight: 950; letter-spacing:-0.01em; }
@@ -306,38 +355,56 @@
       </div>
 
       <div class="toolbar panel">
+        <div class="tabs" style="margin-bottom:10px;">
+          {% for t in view_tabs %}
+            <a class="tab {% if view == t.id %}active{% endif %}" href="{{ t.href }}">{{ t.name }}</a>
+          {% endfor %}
+        </div>
+
+        <div class="tabs" style="margin-bottom:10px;">
+          {% for t in mailbox_tabs %}
+            <a class="tab {% if (mailbox_id|string) == t.id %}active{% endif %}" href="{{ t.href }}" style="--dot: {{ t.color }};">
+              <span class="dot"></span>
+              {{ t.name }}
+            </a>
+          {% endfor %}
+        </div>
+
         <form method="get" action="/" style="display:flex; gap: 10px; flex-wrap: wrap; align-items:center; margin:0; width: 100%;">
           <input class="input" name="q" value="{{ search_q }}" placeholder="Поиск (тема, отправитель, текст)..." style="flex: 1; min-width: 260px;" />
           {% if thread %}<input type="hidden" name="thread" value="{{ thread }}" />{% endif %}
           {% if subj %}<input type="hidden" name="subj" value="{{ subj }}" />{% endif %}
-          <select class="select" name="mailbox_id">
-          <option value="">Все ящики</option>
-          {% for m in mailboxes %}
-            <option value="{{ m.id }}" {% if mailbox_id and mailbox_id|int == m.id %}selected{% endif %}>{{ m.name }} ({{ m.provider }})</option>
-          {% endfor %}
-        </select>
-          <select class="select" name="category">
-          <option value="">Все категории</option>
-          <option value="important" {% if category=='important' %}selected{% endif %}>{{ cat_ru["important"] }}</option>
-          <option value="normal" {% if category=='normal' %}selected{% endif %}>{{ cat_ru["normal"] }}</option>
-          <option value="newsletter" {% if category=='newsletter' %}selected{% endif %}>{{ cat_ru["newsletter"] }}</option>
-          <option value="spam_candidate" {% if category=='spam_candidate' %}selected{% endif %}>{{ cat_ru["spam_candidate"] }}</option>
-        </select>
-          <select class="select" name="sort">
-            <option value="date" {% if sort=='date' %}selected{% endif %}>Сортировка: по дате</option>
-            <option value="score" {% if sort=='score' %}selected{% endif %}>Сортировка: по важности</option>
-          </select>
-          <button class="btn primary" type="submit">Показать</button>
+          {# mailbox/category/sort теперь табами, не селектами #}
+          <button class="btn primary" type="submit">Найти</button>
           <a class="btn ghost" href="/">Сбросить</a>
         </form>
-        <div class="chips" style="margin-top:12px;">
-          <a class="chip {% if quick=='unread' %}active{% endif %}" href="{{ quick_links['unread'] }}">Непрочитанные</a>
-          <a class="chip {% if quick=='important' %}active{% endif %}" href="{{ quick_links['important'] }}">Важные</a>
-          <a class="chip {% if quick=='today' %}active{% endif %}" href="{{ quick_links['today'] }}">Сегодня</a>
-          <a class="chip {% if quick=='week' %}active{% endif %}" href="{{ quick_links['week'] }}">Неделя</a>
-          {% if quick %}
-            <a class="chip" href="{{ quick_links['clear_quick'] }}">Сбросить быстрый фильтр</a>
-          {% endif %}
+
+        <div class="tabs" style="margin-top:12px;">
+          {% for t in category_tabs %}
+            <a class="tab {% if (category|string) == t.id %}active{% endif %}" href="{{ t.href }}">{{ t.name }}</a>
+          {% endfor %}
+        </div>
+
+        <div class="tabs" style="margin-top:10px;">
+          {% for t in sort_tabs %}
+            <a class="tab {% if (sort|string) == t.id %}active{% endif %}" href="{{ t.href }}">{{ t.name }}</a>
+          {% endfor %}
+        </div>
+
+        <div style="margin-top:12px; display:grid; gap: 10px;">
+          <div class="chips">
+            <span class="pill">Статус</span>
+            <a class="chip {% if quick=='unread' %}active{% endif %}" href="{{ quick_links['unread'] }}">Непрочитанные</a>
+            <a class="chip {% if quick=='important' %}active{% endif %}" href="{{ quick_links['important'] }}">Важные</a>
+          </div>
+          <div class="chips">
+            <span class="pill">Период</span>
+            <a class="chip {% if quick=='today' %}active{% endif %}" href="{{ quick_links['today'] }}">Сегодня</a>
+            <a class="chip {% if quick=='week' %}active{% endif %}" href="{{ quick_links['week'] }}">Неделя</a>
+            {% if quick %}
+              <a class="chip" href="{{ quick_links['clear_quick'] }}">Сбросить</a>
+            {% endif %}
+          </div>
         </div>
       </div>
 
@@ -374,11 +441,11 @@
         <div class="grid" style="margin-top: 10px;">
           {% for g in today_groups %}
             {% set e = g["top"] %}
-            <div class="card important {% if g['unread'] and g['unread']>0 %}unread-card{% endif %}">
+            <div class="card cat-important {% if g['unread'] and g['unread']>0 %}unread-card{% endif %}" style="--mb: {{ mailbox_colors.get(e.mailbox_id, '#94a3b8') }};">
               <div class="meta">
-                <span class="pill warn">{{ cat_ru["important"] }}</span>
+                <span class="flag important">Важно</span>
+                {% if g['unread'] and g['unread']>0 %}<span class="flag unread">Непрочитано</span>{% endif %}
                 <span class="pill">писем: {{ g["count"] }}</span>
-                <span class="pill {% if g['unread'] and g['unread']>0 %}warn{% else %}ok{% endif %}">непрочит.: {{ g["unread"] }}</span>
                 <span class="pill">оценка: {{ e.score or "—" }}</span>
               </div>
               <div class="subject-line">
@@ -442,6 +509,9 @@
                 <select class="select" name="action" id="bulkAction">
                   <option value="mark_read">Отметить как прочитанные</option>
                   <option value="archive">В архив</option>
+                  {% if archived_view %}
+                    <option value="unarchive">Вернуть из архива</option>
+                  {% endif %}
                   <option value="set_category">Установить категорию…</option>
                 </select>
                 <select class="select" name="category" id="bulkCategory">
@@ -468,32 +538,26 @@
       {% endif %}
 
       {% for e in emails %}
-        <div class="card {% if e.category=='important' %}important{% endif %} {% if not e.is_read %}unread-card{% endif %}">
+        <div class="card
+          {% if e.category=='important' %}cat-important{% endif %}
+          {% if e.category=='newsletter' %}cat-newsletter{% endif %}
+          {% if e.category=='spam_candidate' %}cat-spam{% endif %}
+          {% if not e.is_read %}unread-card{% endif %}"
+          style="--mb: {{ mailbox_colors.get(e.mailbox_id, '#94a3b8') }};">
           <div class="meta">
             <label class="pill" style="display:flex; gap:8px; align-items:center;">
               <input class="msg-check" type="checkbox" form="bulkForm" name="ids" value="{{ e.id }}" data-is-read="{% if e.is_read %}1{% else %}0{% endif %}" />
               выбрать
             </label>
-            <span class="pill
-              {% if e.category=='important' %}warn
-              {% elif e.category=='newsletter' %}teal
-              {% elif e.category=='spam_candidate' %}danger
-              {% elif e.ai_done %}ok
-              {% endif %}">
-              {{ cat_ru.get(e.category or '', e.category or "—") }}
-            </span>
+            {% if e.category=='important' %}<span class="flag important">Важно</span>{% endif %}
+            {% if not e.is_read %}<span class="flag unread">Непрочитано</span>{% endif %}
+            <span class="pill {% if e.category=='newsletter' %}teal{% elif e.category=='spam_candidate' %}danger{% else %}{% endif %}">{{ cat_ru.get(e.category or '', e.category or "—") }}</span>
             <span class="pill">Оценка: {{ e.score or "—" }}</span>
-            <span class="pill">AI: {{ "да" if e.ai_done else "нет" }}</span>
             <span class="pill">
               ящик:
               {% set mb = mailbox_map.get(e.mailbox_id) %}
               {% if mb %}{{ mb.name }} ({{ mb.provider }}){% else %}#{{ e.mailbox_id }}{% endif %}
             </span>
-            {% if e.is_read %}
-              <span class="pill ok" data-read-pill="1">прочитано</span>
-            {% else %}
-              <span class="pill warn" data-read-pill="1">не прочитано</span>
-            {% endif %}
           </div>
           <div class="subject-line">
             <a class="subject-text {% if not e.is_read %}unread{% endif %}" data-nav="1" href="/email/{{ e.id }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">{{ (e.subject or "(без темы)")|rfc2047 }}</a>
