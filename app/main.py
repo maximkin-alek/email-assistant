@@ -4,6 +4,7 @@ import datetime as dt
 import logging
 import re
 import json
+import os
 from urllib.parse import urlparse
 from email.header import decode_header, make_header
 from email.utils import parseaddr
@@ -56,6 +57,12 @@ templates = Jinja2Templates(directory="templates")
 log = logging.getLogger("email-assistant")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# OAuthlib иногда поднимает предупреждение о расхождении scopes как исключение,
+# из-за чего Gmail OAuth колбэк может падать без сохранения токена.
+# Для нашего кейса это безопасно: мы расширяем права (readonly -> modify), и Google
+# возвращает список фактически выданных scopes.
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
 
 def _decode_rfc2047(value: str | None) -> str:
