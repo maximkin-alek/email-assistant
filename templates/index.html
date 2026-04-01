@@ -96,6 +96,8 @@
         width: 100%;
         position: relative;
         overflow: hidden;
+        min-width: 0;
+        max-width: 100%;
       }
       /* Полоса слева = цвет ящика */
       .card::after{
@@ -115,10 +117,20 @@
       /* Категории — подсветка (мягко) */
       .card.cat-important{
         border-color: rgba(180,83,9,.35);
-        background: linear-gradient(0deg, rgba(245,158,11,.12), rgba(245,158,11,.05));
+        background: #fff; /* прочитанные — белые */
       }
-      .card.cat-newsletter{ border-color: rgba(15,118,110,.22); background: rgba(15,118,110,.04); }
-      .card.cat-spam{ border-color: rgba(180,35,24,.22); background: rgba(180,35,24,.04); }
+      .card.cat-newsletter{ border-color: rgba(15,118,110,.22); background: #fff; }
+      .card.cat-spam{ border-color: rgba(180,35,24,.22); background: #fff; }
+      /* А вот непрочитанные можно дополнительно подсветить по категории */
+      .card.unread-card.cat-important{
+        background: linear-gradient(0deg, rgba(245,158,11,.12), rgba(37,99,235,.04));
+      }
+      .card.unread-card.cat-newsletter{
+        background: linear-gradient(0deg, rgba(15,118,110,.10), rgba(37,99,235,.04));
+      }
+      .card.unread-card.cat-spam{
+        background: linear-gradient(0deg, rgba(180,35,24,.10), rgba(37,99,235,.04));
+      }
 
       .flag{
         display:inline-flex;
@@ -226,7 +238,8 @@
         font-weight: 650;
         color: #2d1b69;
       }
-      .actions{ margin-top: 10px; display:flex; gap: 8px; flex-wrap: wrap; }
+      .actions{ margin-top: 10px; display:flex; gap: 8px; flex-wrap: wrap; min-width: 0; }
+      .actions .btn{ max-width: 100%; white-space: normal; }
       details.full { margin-top: 10px; }
       details.full > summary{
         list-style: none;
@@ -310,6 +323,7 @@
                     radial-gradient(900px 200px at 90% 0%, rgba(37,99,235,.14), rgba(37,99,235,0) 60%),
                     #ffffff;
         box-shadow: 0 14px 36px rgba(124,58,237,.16), var(--shadow);
+        overflow: hidden;
       }
       .section-hdr{ display:flex; gap: 10px; align-items: baseline; justify-content: space-between; flex-wrap: wrap; }
       .section-title{ font-size: 16px; font-weight: 950; letter-spacing:-0.01em; }
