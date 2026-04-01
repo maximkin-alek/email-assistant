@@ -1231,6 +1231,39 @@
         let inflight = false;
         let lastOkAt = 0;
         const AUTO_KEY = "aiDigestAutoRan_v1";
+        const CACHE_KEY = "aiDigestCache_v1";
+
+        function todayKeyLocal() {
+          try {
+            const d = new Date();
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, "0");
+            const dd = String(d.getDate()).padStart(2, "0");
+            return `${y}-${m}-${dd}`;
+          } catch (_) {
+            return "";
+          }
+        }
+
+        function loadCache() {
+          try {
+            const raw = sessionStorage.getItem(CACHE_KEY) || "";
+            if (!raw) return null;
+            const obj = JSON.parse(raw);
+            if (!obj || typeof obj !== "object") return null;
+            if (String(obj.day || "") !== todayKeyLocal()) return null;
+            if (!obj.digest || typeof obj.digest !== "object") return null;
+            return obj;
+          } catch (_) {
+            return null;
+          }
+        }
+
+        function saveCache(digest) {
+          try {
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify({ day: todayKeyLocal(), ts: Date.now(), digest }));
+          } catch (_) {}
+        }
 
         async function run(opts) {
           const o = opts || {};
@@ -1260,6 +1293,7 @@
             render(j.digest || null);
             card.style.display = "";
             lastOkAt = Date.now();
+            if (j && j.digest) saveCache(j.digest);
           } catch (e) {
             clear();
             const msg = (String(e && e.message) === "timeout")
@@ -1276,10 +1310,21 @@
         btn.addEventListener("click", () => run({ force: true, note: "Обновляем AI-выжимку…" }));
         if (hideBtn) hideBtn.addEventListener("click", () => { card.style.display = "none"; });
 
+        // Если есть кэш — показываем сразу (чтобы при reload не было "пусто").
+        const cached = loadCache();
+        if (cached && cached.digest) {
+          try {
+            render(cached.digest);
+            card.style.display = "";
+            if (cached.ts) lastOkAt = Number(cached.ts) || 0;
+          } catch (_) {}
+        }
+
         // Авто-выжимка только при первом заходе в рамках вкладки/сессии браузера.
+        // Но если кэша нет — запускаем и при перезагрузке, чтобы пользователь не ждал "пустой" блок.
         try {
           const already = sessionStorage.getItem(AUTO_KEY) === "1";
-          if (!already) {
+          if (!already || !cached) {
             sessionStorage.setItem(AUTO_KEY, "1");
             setTimeout(() => run({}), 250);
           }
