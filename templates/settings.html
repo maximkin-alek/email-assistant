@@ -40,6 +40,21 @@
       </div>
     </div>
 
+    {% if ui_notice or ui_error %}
+      <div class="card" style="margin-top:12px;">
+        {% if ui_notice %}
+          <div class="ok">
+            {% if ui_notice == "imap_added" %}IMAP ящик добавлен.{% else %}{{ ui_notice }}{% endif %}
+          </div>
+        {% endif %}
+        {% if ui_error %}
+          <div class="err">
+            {% if ui_error == "fill_required" %}Заполни имя, host, логин и пароль.{% elif ui_error == "bad_port" %}Порт должен быть 1–65535.{% else %}{{ ui_error }}{% endif %}
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+
     <div class="grid">
       <div class="card">
         <div class="meta" style="justify-content: space-between;">
@@ -62,6 +77,35 @@
           </div>
           <div>
             <button class="btn" type="submit">Сохранить правила</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="meta" style="justify-content: space-between;">
+          <div class="title" style="font-size:16px;">Добавить IMAP ящик</div>
+          <span class="pill">Яндекс / Mail.ru / другой</span>
+        </div>
+        <div class="muted" style="margin-top:8px;">
+          Данные сохраняются в базе в зашифрованном виде. Для Яндекса обычно: <span class="pill">imap.yandex.ru</span> порт <span class="pill">993</span>.
+        </div>
+        <form method="post" action="/actions/mailbox/add-imap" style="margin-top:12px; display:grid; gap:10px;">
+          <div class="kv" style="grid-template-columns: 220px 1fr;">
+            <div class="k">Название (в интерфейсе)</div>
+            <div class="v"><input name="name" placeholder="Яндекс 2" style="width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:10px;" /></div>
+            <div class="k">IMAP host</div>
+            <div class="v"><input name="host" placeholder="imap.yandex.ru" style="width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:10px;" /></div>
+            <div class="k">Порт</div>
+            <div class="v"><input name="port" value="993" style="width:140px; padding:8px 10px; border:1px solid #ddd; border-radius:10px;" /></div>
+            <div class="k">Логин</div>
+            <div class="v"><input name="username" placeholder="user@yandex.ru" style="width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:10px;" /></div>
+            <div class="k">Пароль / пароль приложения</div>
+            <div class="v"><input type="password" name="password" placeholder="••••••••" style="width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:10px;" /></div>
+            <div class="k">Папка</div>
+            <div class="v"><input name="folder" value="INBOX" style="width:220px; padding:8px 10px; border:1px solid #ddd; border-radius:10px;" /></div>
+          </div>
+          <div>
+            <button class="btn" type="submit">Добавить ящик</button>
           </div>
         </form>
       </div>

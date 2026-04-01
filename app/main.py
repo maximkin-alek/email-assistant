@@ -1001,6 +1001,10 @@ def settings_page(request: Request) -> HTMLResponse:
     # значит job мог завершиться/упасть/быть очищен — показываем предупреждение.
     status_mismatch = bool(run and run.running and (queue_pending + queue_started == 0))
 
+    qp = request.query_params
+    ui_notice = (qp.get("notice") or "").strip()
+    ui_error = (qp.get("error") or "").strip()
+
     return templates.TemplateResponse(
         request=request,
         name="settings.html",
@@ -1019,8 +1023,46 @@ def settings_page(request: Request) -> HTMLResponse:
             "rules": rules,
             "ai_base_url": settings.ai_base_url,
             "ai_model": settings.ai_model,
+            "ui_notice": ui_notice,
+            "ui_error": ui_error,
         },
     )
+
+
+@app.post("/actions/mailbox/add-imap")
+def action_mailbox_add_imap(
+    name: str = Form(...),
+    host: str = Form(...),
+    port: int = Form(default=993),
+    username: str = Form(...),
+    password: str = Form(...),
+    folder: str = Form(default="INBOX"),
+) -> RedirectResponse:
+    name = (name or "").strip()
+    host = (host or "").strip()
+    username = (username or "").strip()
+    password = (password or "").strip()
+    folder = (folder or "INBOX").strip() or "INBOX"
+    try:
+        port_i = int(port)
+    except Exception:
+        port_i = 993
+    if not (name and host and username and password):
+        return RedirectResponse("/settings?error=fill_required", status_code=303)
+    if port_i <= 0 or port_i > 65535:
+        return RedirectResponse("/settings?error=bad_port", status_code=303)
+
+    with session_scope() as s:
+        mb = Mailbox(provider="imap", name=name, is_enabled=True)
+        mb.imap_host_enc = encrypt_str(host)
+        mb.imap_port = port_i
+        mb.imap_user_enc = encrypt_str(username)
+        mb.imap_password_enc = encrypt_str(password)
+        mb.imap_folder = folder
+        mb.imap_last_uid = None
+        s.add(mb)
+
+    return RedirectResponse("/settings?notice=imap_added", status_code=303)
 
 
 @app.post("/actions/rules-save")
