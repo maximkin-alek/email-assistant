@@ -1695,11 +1695,11 @@ def action_sync_all() -> RedirectResponse:
             mb.last_sync_error = None
             mb.last_sync_count = 0
             mb.last_sync_at = now
-    for mailbox_id, provider in mailboxes:
-        if provider == "gmail":
-            q.enqueue(sync_gmail_mailbox, mailbox_id)
+    for mb in mailboxes:
+        if mb.provider == "gmail":
+            q.enqueue(sync_gmail_mailbox, mb.id)
         else:
-            q.enqueue(sync_imap_mailbox, mailbox_id)
+            q.enqueue(sync_imap_mailbox, mb.id)
     return RedirectResponse("/", status_code=303)
 
 
@@ -1717,11 +1717,11 @@ def api_sync_all() -> dict:
             mb.last_sync_error = None
             mb.last_sync_count = 0
             mb.last_sync_at = now
-    for mailbox_id, provider in mailboxes:
-        if provider == "gmail":
-            q.enqueue(sync_gmail_mailbox, mailbox_id)
+    for mb in mailboxes:
+        if mb.provider == "gmail":
+            q.enqueue(sync_gmail_mailbox, mb.id)
         else:
-            q.enqueue(sync_imap_mailbox, mailbox_id)
+            q.enqueue(sync_imap_mailbox, mb.id)
     return {"ok": True}
 
 
