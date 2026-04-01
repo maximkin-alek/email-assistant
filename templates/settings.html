@@ -87,14 +87,18 @@
         <div class="kv">
           <div class="k">Статус</div>
           <div class="v">
-            {% if ai_run and ai_run.message == "В очереди" %}
-              <span class="warn">В очереди</span>
-            {% elif ai_run and ai_run.running %}
-              <span class="warn">В процессе</span>
+            {% if ai_run_status_label in ["В очереди", "В процессе"] %}
+              <span class="warn">{{ ai_run_status_label }}</span>
             {% else %}
-              <span class="ok">Не выполняется</span>
+              <span class="ok">{{ ai_run_status_label }}</span>
             {% endif %}
-            {% if ai_run and ai_run.message and ai_run.message not in ["В очереди"] %} — {{ ai_run.message }}{% endif %}
+            {% if ai_run_status_detail %} — {{ ai_run_status_detail }}{% endif %}
+            {% if ai_run_status_mismatch %}
+              <div class="muted" style="margin-top:6px;">
+                Похоже, job уже не в очереди/не выполняется, но статус остался “В процессе”.
+                Обнови страницу или запусти обработку заново.
+              </div>
+            {% endif %}
           </div>
           <div class="k">Прогресс</div>
           <div class="v">

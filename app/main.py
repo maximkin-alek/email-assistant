@@ -976,6 +976,21 @@ def settings_page(request: Request) -> HTMLResponse:
     queue_pending = q.count + len(scheduled_registry.get_job_ids()) + len(deferred_registry.get_job_ids())
     queue_started = len(started_registry.get_job_ids())
 
+    # Человеческий статус без дублей и с детектором "зависшего" состояния.
+    status_label = "Не выполняется"
+    if run and run.message == "В очереди":
+        status_label = "В очереди"
+    elif run and run.running:
+        status_label = "В процессе"
+
+    status_detail = ""
+    if run and run.message and run.message not in {"", status_label, "В очереди"}:
+        status_detail = run.message
+
+    # Если Redis-статус говорит "running", но в очередях ничего не выполняется,
+    # значит job мог завершиться/упасть/быть очищен — показываем предупреждение.
+    status_mismatch = bool(run and run.running and (queue_pending + queue_started == 0))
+
     return templates.TemplateResponse(
         request=request,
         name="settings.html",
@@ -984,6 +999,9 @@ def settings_page(request: Request) -> HTMLResponse:
             "ai_test": get_ai_test_result(),
             "ai_test_status": get_ai_test_status(),
             "ai_run": run,
+            "ai_run_status_label": status_label,
+            "ai_run_status_detail": status_detail,
+            "ai_run_status_mismatch": status_mismatch,
             "ai_run_started_h": _fmt_iso(run.started_at),
             "ai_run_finished_h": _fmt_iso(run.finished_at),
             "queue_pending": queue_pending,
