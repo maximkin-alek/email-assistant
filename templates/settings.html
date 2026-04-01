@@ -23,6 +23,48 @@
       .v { color:#111; word-break: break-word; }
       .ok { color: #14532d; }
       .warn { color: #92400e; }
+
+      .help {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        border: 1px solid #d1d5db;
+        color: #6b7280;
+        background: #fff;
+        font-size: 12px;
+        font-weight: 800;
+        line-height: 1;
+        user-select: none;
+        cursor: help;
+        position: relative;
+      }
+      .help:hover, .help:focus { outline: none; border-color:#94a3b8; color:#334155; }
+      .help::after {
+        content: attr(data-tip);
+        display: none;
+        position: absolute;
+        left: 50%;
+        bottom: calc(100% + 8px);
+        transform: translateX(-50%);
+        background: #0f172a;
+        color: #fff;
+        padding: 8px 10px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 12px;
+        white-space: pre-wrap;
+        max-width: 360px;
+        width: max-content;
+        box-shadow: 0 10px 28px rgba(0,0,0,.18);
+        z-index: 20;
+      }
+      .help:hover::after, .help:focus::after { display: block; }
+      details.helpbox { margin-top: 10px; }
+      details.helpbox > summary { cursor: pointer; color:#666; }
+      details.helpbox .inner { margin-top: 8px; color:#111; font-size: 13px; line-height: 1.35; }
     </style>
   </head>
   <body>
@@ -36,12 +78,15 @@
         <form method="post" action="/actions/mailbox/import-env" style="margin:0;">
           <button class="btn" type="submit">Импортировать ящики из .env</button>
         </form>
+        <span class="help" tabindex="0" data-tip="Создаёт IMAP‑ящики из переменных YANDEX_IMAP_* / MAILRU_IMAP_* в .env.\nУдобно при миграции: не нужно вводить логины/пароли вручную.">?</span>
         <form method="post" action="/actions/mailbox/add-gmail" style="margin:0;">
           <button class="btn" type="submit">Добавить Gmail</button>
         </form>
+        <span class="help" tabindex="0" data-tip="Запускает OAuth‑подключение Gmail.\nЕсли ты уже подключал этот Gmail, приложение постарается не создавать дубль.">?</span>
         <form method="post" action="/actions/recompute" style="margin:0;">
           <button class="btn" type="submit">Пересчитать базовую классификацию</button>
         </form>
+        <span class="help" tabindex="0" data-tip="Быстрый пересчёт базовых правил (без AI): важность/рассылки по эвристикам и твоим правилам.\nПолезно после изменения правил секретаря.">?</span>
       </div>
     </div>
 
@@ -152,43 +197,103 @@
             <form method="post" action="/actions/ai-run" style="margin:0;">
               <button class="btn" type="submit">Запустить AI обработку</button>
             </form>
+            <span class="help" tabindex="0" data-tip="Поставит в очередь AI‑обработку писем (summary/объяснения/категории).\nМонитор ниже покажет прогресс и состояние очереди.">?</span>
             <form method="post" action="/actions/ai-stop" style="margin:0;">
               <button class="btn" type="submit">Остановить</button>
             </form>
+            <span class="help" tabindex="0" data-tip="Останавливает текущий прогон AI.\nПолезно, если хочешь сменить модель/ключ или разгрузить систему.">?</span>
           </div>
         </div>
 
         <div class="kv">
           <div class="k">Статус</div>
-          <div class="v">
+          <div class="v" id="aiStatusLine">
             {% if ai_run_status_label in ["В очереди", "В процессе"] %}
-              <span class="warn">{{ ai_run_status_label }}</span>
+              <span class="warn" id="aiStatusLabel">{{ ai_run_status_label }}</span>
             {% else %}
-              <span class="ok">{{ ai_run_status_label }}</span>
+              <span class="ok" id="aiStatusLabel">{{ ai_run_status_label }}</span>
             {% endif %}
-            {% if ai_run_status_detail %} — {{ ai_run_status_detail }}{% endif %}
-            {% if ai_run_status_mismatch %}
-              <div class="muted" style="margin-top:6px;">
-                Похоже, job уже не в очереди/не выполняется, но статус остался “В процессе”.
-                Обнови страницу или запусти обработку заново.
-              </div>
-            {% endif %}
+            <span id="aiStatusDetail">{% if ai_run_status_detail %} — {{ ai_run_status_detail }}{% endif %}</span>
+            <div class="muted" style="margin-top:6px; display:none;" id="aiMismatchHint">
+              Похоже, job уже не в очереди/не выполняется, но статус остался “В процессе”. Монитор попробует исправить это автоматически.
+            </div>
           </div>
           <div class="k">Прогресс</div>
-          <div class="v">
+          <div class="v" id="aiProgress">
             {% if ai_run %}
               {{ ai_run.processed }}/{{ ai_run.total }} (OK: {{ ai_run.ok }}, ошибки: {{ ai_run.failed }})
             {% else %}
               —
             {% endif %}
           </div>
-          <div class="k">Очередь</div><div class="v">ожидают: {{ queue_pending }}, выполняются: {{ queue_started }}</div>
-          <div class="k">Старт</div><div class="v">{{ ai_run_started_h or "—" }}</div>
-          <div class="k">Финиш</div><div class="v">{{ ai_run_finished_h or "—" }}</div>
+          <div class="k">Очередь</div><div class="v" id="aiQueue">ожидают: {{ queue_pending }}, выполняются: {{ queue_started }}</div>
+          <div class="k">Старт</div><div class="v" id="aiStarted">{{ ai_run_started_h or "—" }}</div>
+          <div class="k">Финиш</div><div class="v" id="aiFinished">{{ ai_run_finished_h or "—" }}</div>
+          <div class="k">Heartbeat</div><div class="v" id="aiUpdated">{% if ai_run and ai_run.updated_at %}{{ ai_run.updated_at }}{% else %}—{% endif %}</div>
         </div>
-        {% if ai_run and ai_run.running %}
-          <div class="muted" style="margin-top:8px;">Обнови страницу через 10–20 секунд — прогресс будет расти.</div>
-        {% endif %}
+        <div class="muted" style="margin-top:8px;" id="aiAutoHint">Монитор обновляет данные автоматически.</div>
+
+        <script>
+          (function () {
+            function fmtIsoLocal(iso) {
+              try {
+                if (!iso) return "—";
+                const d = new Date(iso);
+                if (Number.isNaN(d.getTime())) return iso;
+                return new Intl.DateTimeFormat("ru-RU", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit", second:"2-digit" }).format(d);
+              } catch (_) {
+                return iso || "—";
+              }
+            }
+            function setText(id, text) {
+              const el = document.getElementById(id);
+              if (!el) return;
+              el.textContent = text;
+            }
+            function setHtml(id, html) {
+              const el = document.getElementById(id);
+              if (!el) return;
+              el.innerHTML = html;
+            }
+            function show(id, on) {
+              const el = document.getElementById(id);
+              if (!el) return;
+              el.style.display = on ? "" : "none";
+            }
+
+            async function tick() {
+              try {
+                const r = await fetch("/api/ai-run-status", { cache: "no-store" });
+                if (!r.ok) return;
+                const data = await r.json();
+                if (!data || !data.ok) return;
+                const run = data.run || {};
+                const ui = data.ui || {};
+
+                // status label coloring
+                const label = ui.status_label || "—";
+                const detail = ui.status_detail ? (" — " + ui.status_detail) : "";
+                const labelEl = document.getElementById("aiStatusLabel");
+                if (labelEl) {
+                  labelEl.textContent = label;
+                  labelEl.className = (label === "В очереди" || label === "В процессе") ? "warn" : "ok";
+                }
+                setText("aiStatusDetail", detail);
+                show("aiMismatchHint", !!ui.status_mismatch);
+
+                setText("aiProgress", `${run.processed || 0}/${run.total || 0} (OK: ${run.ok || 0}, ошибки: ${run.failed || 0})`);
+                setText("aiQueue", `ожидают: ${ui.queue_pending || 0}, выполняются: ${ui.queue_started || 0}`);
+                setText("aiStarted", fmtIsoLocal(run.started_at));
+                setText("aiFinished", fmtIsoLocal(run.finished_at));
+                setText("aiUpdated", fmtIsoLocal(run.updated_at));
+              } catch (_) {}
+            }
+
+            // стартуем сразу и дальше обновляем каждые 2 сек
+            tick();
+            setInterval(tick, 2000);
+          })();
+        </script>
 
         <details style="margin-top:12px;">
           <summary class="muted" style="cursor:pointer;">Сервисные инструменты</summary>
@@ -197,12 +302,15 @@
               <form method="post" action="/actions/ai-test" style="margin:0;">
                 <button class="btn" type="submit">Проверить AI-модель</button>
               </form>
+              <span class="help" tabindex="0" data-tip="Делает короткий тестовый запрос к AI (по текущим AI_BASE_URL/AI_MODEL).\nНужно, чтобы быстро понять: ключ/модель/доступ работают или нет.">?</span>
               <form method="post" action="/actions/ai-retry-frozen" style="margin:0;">
                 <button class="btn" type="submit">Переобработать “cannot assign …”</button>
               </form>
+              <span class="help" tabindex="0" data-tip="Сервисная кнопка: переотправляет в AI письма, которые «застряли» из‑за редкой ошибки сериализации/сохранения.\nЕсли не было проблем — не трогай.">?</span>
               <form method="post" action="/actions/ai-reset-all" style="margin:0;">
                 <button class="btn" type="submit">Сбросить AI-статус (для тестов)</button>
               </form>
+              <span class="help" tabindex="0" data-tip="Сервисная кнопка: помечает письма как не‑обработанные AI, чтобы прогнать их заново.\nИспользовать осторожно — увеличит объём работ для воркера.">?</span>
               <form method="post" action="/actions/ai-reset-mailbox" style="margin:0; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
                 <select name="mailbox_id" style="padding:8px 10px; border:1px solid #ddd; border-radius:10px;">
                   {% for m in mailboxes %}
@@ -211,6 +319,7 @@
                 </select>
                 <button class="btn" type="submit">Сбросить для ящика</button>
               </form>
+              <span class="help" tabindex="0" data-tip="То же самое, но только для выбранного ящика.\nУдобно, если хочешь переобработать один источник (например, после изменения правил).">?</span>
             </div>
 
             {% if ai_test_status %}
@@ -259,6 +368,7 @@
           <form method="post" action="/actions/sync-all" style="margin:0;">
             <button class="btn" type="submit">Синхронизировать всё</button>
           </form>
+          <span class="help" tabindex="0" data-tip="Запускает синхронизацию всех включённых ящиков.\nЕсли писем не видно — проверь вкладку «Архив» и фильтры во «Входящих».">?</span>
         </div>
 
         <div class="grid" style="margin-top: 12px;">
@@ -296,17 +406,21 @@
                   <form method="post" action="/actions/sync/{{ m.id }}" style="margin:0;">
                     <button class="btn" type="submit">Синхронизировать</button>
                   </form>
+                  <span class="help" tabindex="0" data-tip="Синхронизирует только этот ящик.\nПолезно после подключения или если у одного ящика ошибка.">?</span>
                 {% if m.provider == 'imap' %}
                   <form method="post" action="/actions/mailbox/tls-verify/{{ m.id }}" style="margin:0;">
                     <button class="btn" type="submit">{% if m.imap_tls_verify %}TLS verify off{% else %}TLS verify on{% endif %}</button>
                   </form>
+                  <span class="help" tabindex="0" data-tip="Если включено (on) — проверяем TLS‑сертификат сервера (рекомендуется).\nЕсли VPN/антивирус подменяет сертификат и IMAP падает с CERTIFICATE_VERIFY_FAILED — можно выключить.">?</span>
                 {% endif %}
                   <form method="post" action="/actions/mailbox/toggle/{{ m.id }}" style="margin:0;">
                     <button class="btn" type="submit">{% if m.is_enabled %}Выключить{% else %}Включить{% endif %}</button>
                   </form>
+                  <span class="help" tabindex="0" data-tip="Выключенный ящик не синхронизируется и не участвует в «Синхронизировать всё».\nПисьма в базе при этом остаются.">?</span>
                   <form method="post" action="/actions/mailbox/delete/{{ m.id }}" style="margin:0;" onsubmit="return confirm('Удалить ящик и все письма из него?');">
                     <button class="btn" type="submit" style="border-color:#fecaca; color:#991b1b;">Удалить</button>
                   </form>
+                  <span class="help" tabindex="0" data-tip="Удаляет ящик и ВСЕ письма/вложения этого ящика из базы.\nДействие необратимо.">?</span>
                 </div>
               </div>
               {% if m.last_sync_error %}

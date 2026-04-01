@@ -93,7 +93,7 @@
         padding: 14px;
         background: var(--card);
         box-shadow: var(--shadow);
-        width: 100%;
+        width: auto;
         position: relative;
         overflow: hidden;
         min-width: 0;
@@ -440,13 +440,121 @@
       </div>
     {% endif %}
 
-    {% if today_groups and today_groups|length > 0 %}
+    {% if day_summary %}
+      <details class="section" id="daySummary" open>
+        <summary>
+          <div class="section-hdr">
+            <div>
+              <div class="section-title">Сводка дня <span class="chev" id="daySummaryChev">▾</span></div>
+              <div class="subtitle" style="margin-top: 4px;">
+                Добрый день. Сегодня: всего <b>{{ day_summary.day_total }}</b>,
+                непрочитано <b>{{ day_summary.day_new }}</b>,
+                важных <b>{{ day_summary.day_important }}</b>,
+                рассылок <b>{{ day_summary.day_newsletters }}</b>.
+              </div>
+            </div>
+            <div class="actions">
+              <button class="btn primary" type="button" id="aiDigestBtn">AI-выжимка дня</button>
+              <form method="post" action="/api/day-summary" data-ajax="1" data-api="/api/day-summary" style="margin:0;">
+                <input type="hidden" name="action" value="mark_read_today_new" />
+                <input type="hidden" name="mailbox_id" value="{{ mailbox_id }}" />
+                <button class="btn" type="submit">Прочитано: все непрочитанные за сегодня</button>
+              </form>
+              <form method="post" action="/api/day-summary" data-ajax="1" data-api="/api/day-summary" style="margin:0;">
+                <input type="hidden" name="action" value="archive_today_newsletters" />
+                <input type="hidden" name="mailbox_id" value="{{ mailbox_id }}" />
+                <button class="btn" type="submit">В архив: рассылки за сегодня</button>
+              </form>
+              <a class="btn" href="{{ request.url.include_query_params(quick='today', category='important', page='1') }}">Показать важные сегодня</a>
+            </div>
+          </div>
+        </summary>
+
+        <div class="grid" style="margin-top:12px;">
+          <div class="card" id="aiDigestCard" style="display:none;">
+            <div class="meta" style="justify-content: space-between;">
+              <div class="meta">
+                <span class="pill violet">AI-выжимка</span>
+                <span class="pill" id="aiDigestModel">—</span>
+              </div>
+              <button class="btn" type="button" id="aiDigestHideBtn">Скрыть</button>
+            </div>
+            <div style="margin-top:10px;">
+              <div style="font-weight:900;" id="aiDigestHeadline"></div>
+              <ul style="margin-top:10px; padding-left: 18px;" id="aiDigestBullets"></ul>
+              <div class="actions" style="margin-top:10px;" id="aiDigestActions"></div>
+              <div class="muted" style="margin-top:8px; display:none;" id="aiDigestError"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="meta" style="justify-content: space-between;">
+              <div class="meta">
+                <span class="pill violet">О чём была почта сегодня</span>
+                <span class="pill">кластеров: {{ day_summary.clusters|length }}</span>
+              </div>
+              <a class="btn" href="{{ request.url.include_query_params(quick='today', page='1') }}">Показать все письма за сегодня</a>
+            </div>
+            {% if day_summary.clusters and day_summary.clusters|length > 0 %}
+              <div style="margin-top:10px; display:grid; gap:10px;">
+                {% for c in day_summary.clusters %}
+                  <div class="card" style="margin:0; width:auto; max-width:100%;">
+                    <div class="meta">
+                      {% if c.important and c.important > 0 %}<span class="flag important">Есть важное</span>{% endif %}
+                      {% if c.unread and c.unread > 0 %}<span class="flag unread">Непрочитано: {{ c.unread }}</span>{% endif %}
+                      <span class="pill">Писем: {{ c.count }}</span>
+                      {% if c.newsletter and c.newsletter > 0 %}<span class="pill teal">рассылки: {{ c.newsletter }}</span>{% endif %}
+                      {% if c.senders and c.senders|length > 0 %}<span class="pill">от: {{ c.senders|join(", ") }}</span>{% endif %}
+                    </div>
+                    <div class="subject-line">
+                      {% if c.kind == "thread" %}
+                        <a class="subject-text" href="{{ request.url.include_query_params(quick='today', thread=c.key, page='1') }}">Тред: {{ c.top_subject|rfc2047 }}</a>
+                      {% else %}
+                        <a class="subject-text" href="{{ request.url.include_query_params(quick='today', subj=c.key, page='1') }}">{{ c.top_subject|rfc2047 }}</a>
+                      {% endif %}
+                      <div class="date"><a class="btn" style="padding:6px 10px;" data-nav="1" href="/email/{{ c.top_email_id }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">Открыть пример</a></div>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="muted" style="margin-top:10px;">Пока нет писем за сегодня.</div>
+            {% endif %}
+          </div>
+
+          {% if day_summary.attention and day_summary.attention|length > 0 %}
+            <div class="card">
+              <div class="meta" style="justify-content: space-between;">
+                <div class="meta">
+                  <span class="pill danger">Требует внимания</span>
+                </div>
+              </div>
+              <div style="margin-top:10px; display:grid; gap:10px;">
+                {% for a in day_summary.attention %}
+                  <div class="card" style="margin:0; width:auto; max-width:100%;">
+                    <div class="meta" style="justify-content: space-between;">
+                      <div>
+                        <div style="font-weight:900;">{{ a.title }}</div>
+                        {% if a.hint %}<div class="muted" style="margin-top:4px;">{{ a.hint }}</div>{% endif %}
+                      </div>
+                      <a class="btn" href="{{ a.href }}">Открыть</a>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </details>
+    {% endif %}
+
+    {% if today_groups and today_groups|length > 0 and not (quick=='today' and category=='important') %}
       <details class="section" id="todaySection" open>
         <summary>
           <div class="section-hdr">
             <div>
-              <div class="section-title">Сегодня важное <span class="chev" id="todayChev">▾</span></div>
-              <div class="subtitle" style="margin-top: 4px;">Группы по тредам/темам. Быстрые действия без перезагрузки.</div>
+              <div class="section-title">Сегодня важное (непрочитанные) <span class="chev" id="todayChev">▾</span></div>
+              <div class="subtitle" style="margin-top: 4px;">Только то, что ещё не просмотрено. Быстрые действия без перезагрузки.</div>
             </div>
             <div class="meta" style="margin:0;">
               <span class="pill violet">фокус</span>
@@ -547,10 +655,45 @@
     </form>
 
     <div class="grid">
+      <div class="card" style="padding:10px 12px;">
+        <div class="meta" style="justify-content: space-between;">
+          <div class="meta">
+            <span class="pill">Страница: {{ page }} / {{ pages_total }}</span>
+            <span class="pill">Писем: {{ total }}</span>
+            <span class="pill" style="display:flex; gap:8px; align-items:center;">
+              На странице:
+              <select class="select" style="padding:4px 8px;" onchange="setPer(this.value)">
+                <option value="20" {% if per == 20 %}selected{% endif %}>20</option>
+                <option value="50" {% if per == 50 %}selected{% endif %}>50</option>
+                <option value="100" {% if per == 100 %}selected{% endif %}>100</option>
+                <option value="200" {% if per == 200 %}selected{% endif %}>200</option>
+              </select>
+            </span>
+          </div>
+          <div class="meta">
+            {% if has_prev %}
+              <a class="btn" href="{{ prev_href }}">← Назад</a>
+            {% else %}
+              <span class="pill">← Назад</span>
+            {% endif %}
+            {% if has_next %}
+              <a class="btn" href="{{ next_href }}">Вперёд →</a>
+            {% else %}
+              <span class="pill">Вперёд →</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
       {% if emails|length == 0 %}
         <div class="card">
           <div style="font-weight: 900; font-size: 16px;">Писем пока нет</div>
-          <div class="subtitle">Зайди в “Настройки” и запусти синхронизацию ящиков.</div>
+          <div class="subtitle">Если ты недавно архивировал рассылки/письма — проверь вкладку “Архив”. Также можно сбросить фильтры.</div>
+          <div class="meta" style="margin-top: 10px;">
+            <a class="btn" href="/?view=archive&page=1">Открыть архив</a>
+            <a class="btn" href="/?page=1">Сбросить фильтры</a>
+            <a class="btn" href="/settings">Настройки</a>
+          </div>
         </div>
       {% endif %}
 
@@ -620,6 +763,38 @@
           {# Полный просмотр теперь на странице письма (/email/{id}) #}
         </div>
       {% endfor %}
+
+      {% if emails|length > 0 %}
+        <div class="card" style="padding:10px 12px;">
+          <div class="meta" style="justify-content: space-between;">
+            <div class="meta">
+              <span class="pill">Страница: {{ page }} / {{ pages_total }}</span>
+              <span class="pill">Писем: {{ total }}</span>
+              <span class="pill" style="display:flex; gap:8px; align-items:center;">
+                На странице:
+                <select class="select" style="padding:4px 8px;" onchange="setPer(this.value)">
+                  <option value="20" {% if per == 20 %}selected{% endif %}>20</option>
+                  <option value="50" {% if per == 50 %}selected{% endif %}>50</option>
+                  <option value="100" {% if per == 100 %}selected{% endif %}>100</option>
+                  <option value="200" {% if per == 200 %}selected{% endif %}>200</option>
+                </select>
+              </span>
+            </div>
+            <div class="meta">
+              {% if has_prev %}
+                <a class="btn" href="{{ prev_href }}">← Назад</a>
+              {% else %}
+                <span class="pill">← Назад</span>
+              {% endif %}
+              {% if has_next %}
+                <a class="btn" href="{{ next_href }}">Вперёд →</a>
+              {% else %}
+                <span class="pill">Вперёд →</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endif %}
     </div>
     </div>
 
@@ -817,6 +992,11 @@
               }
               if (syncBtn) syncBtn.textContent = "Синхронизировать";
             }
+            if (url === "/api/day-summary") {
+              // Массовые действия из "Сводки дня": обновим страницу, чтобы пересчитались цифры и кластеры.
+              window.location.reload();
+              return;
+            }
             if (btn) btn.disabled = false;
           } catch (err) {
             if (btn) btn.disabled = false;
@@ -883,6 +1063,132 @@
 
     <script>
       (function () {
+        // Запоминаем свёрнутое состояние "Сводка дня"
+        const el = document.getElementById("daySummary");
+        const chev = document.getElementById("daySummaryChev");
+        if (!el) return;
+        const KEY = "daySummaryOpen";
+        try {
+          const saved = localStorage.getItem(KEY);
+          if (saved === "0") el.open = false;
+          if (saved === "1") el.open = true;
+        } catch (_) {}
+        function sync() {
+          if (chev) chev.textContent = el.open ? "▾" : "▸";
+          try { localStorage.setItem(KEY, el.open ? "1" : "0"); } catch (_) {}
+        }
+        el.addEventListener("toggle", sync);
+        sync();
+      })();
+    </script>
+
+    <script>
+      (function () {
+        const btn = document.getElementById("aiDigestBtn");
+        const hideBtn = document.getElementById("aiDigestHideBtn");
+        const card = document.getElementById("aiDigestCard");
+        const modelEl = document.getElementById("aiDigestModel");
+        const headEl = document.getElementById("aiDigestHeadline");
+        const bulletsEl = document.getElementById("aiDigestBullets");
+        const actionsEl = document.getElementById("aiDigestActions");
+        const errEl = document.getElementById("aiDigestError");
+        if (!btn || !card) return;
+
+        function clear() {
+          if (modelEl) modelEl.textContent = "—";
+          if (headEl) headEl.textContent = "";
+          if (bulletsEl) bulletsEl.innerHTML = "";
+          if (actionsEl) actionsEl.innerHTML = "";
+          if (errEl) { errEl.textContent = ""; errEl.style.display = "none"; }
+        }
+
+        function render(digest) {
+          clear();
+          if (!digest) return;
+          if (modelEl && digest.model) modelEl.textContent = digest.model;
+          if (headEl) headEl.textContent = digest.headline || "";
+          if (bulletsEl) {
+            (digest.bullets || []).forEach((b) => {
+              const li = document.createElement("li");
+              li.textContent = String(b || "");
+              bulletsEl.appendChild(li);
+            });
+          }
+          if (actionsEl) {
+            (digest.actions || []).forEach((a) => {
+              const id = (a && a.id) ? String(a.id) : "";
+              const title = (a && a.title) ? String(a.title) : "";
+              if (!id || !title) return;
+              if (id === "mark_read_today_new" || id === "archive_today_newsletters") {
+                const form = document.createElement("form");
+                form.method = "post";
+                form.action = "/api/day-summary";
+                form.setAttribute("data-ajax", "1");
+                form.setAttribute("data-api", "/api/day-summary");
+                form.style.margin = "0";
+                const inpA = document.createElement("input");
+                inpA.type = "hidden";
+                inpA.name = "action";
+                inpA.value = id;
+                form.appendChild(inpA);
+                const inpM = document.createElement("input");
+                inpM.type = "hidden";
+                inpM.name = "mailbox_id";
+                inpM.value = "";
+                form.appendChild(inpM);
+                const b = document.createElement("button");
+                b.className = "btn";
+                b.type = "submit";
+                b.textContent = title;
+                form.appendChild(b);
+                actionsEl.appendChild(form);
+              }
+            });
+          }
+          if (digest.error && errEl) {
+            errEl.textContent = "Примечание: " + String(digest.error);
+            errEl.style.display = "";
+          }
+        }
+
+        async function run() {
+          btn.disabled = true;
+          btn.textContent = "AI-выжимка…";
+          try {
+            const r = await fetch("/api/day-summary-ai", { method: "POST", headers: { "Accept": "application/json" } });
+            const j = await r.json();
+            if (!j || j.ok === false) throw new Error("api_error");
+            render(j.digest || null);
+            card.style.display = "";
+          } catch (e) {
+            clear();
+            if (errEl) {
+              errEl.textContent = "Не удалось получить AI-выжимку. Попробуй ещё раз.";
+              errEl.style.display = "";
+            }
+            card.style.display = "";
+          } finally {
+            btn.disabled = false;
+            btn.textContent = "AI-выжимка дня";
+          }
+        }
+
+        btn.addEventListener("click", run);
+        if (hideBtn) hideBtn.addEventListener("click", () => { card.style.display = "none"; });
+      })();
+    </script>
+
+    <script>
+      (function () {
+        window.setPer = function setPer(v) {
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.set("per", String(v || "50"));
+            url.searchParams.set("page", "1");
+            window.location.assign(url.toString());
+          } catch (_) {}
+        }
+
         function fmtIso(iso) {
           try {
             const d = new Date(iso);

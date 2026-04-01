@@ -404,6 +404,8 @@ def index(
     thread: str | None = None,
     subj: str | None = None,
     view: str | None = None,
+    page: str | None = None,
+    per: str | None = None,
 ) -> HTMLResponse:
     with session_scope() as s:
         mailboxes = list(s.scalars(select(Mailbox).order_by(Mailbox.id.asc())))
@@ -431,11 +433,7 @@ def index(
         archived_view = view_v in {"archive", "archived"}
 
         base_qry = select(EmailMessage).where(EmailMessage.is_archived == (True if archived_view else False))  # noqa: E712
-        qry = (
-            select(EmailMessage)
-            .where(EmailMessage.is_archived == (True if archived_view else False))  # noqa: E712
-            .limit(200)
-        )
+        qry = select(EmailMessage).where(EmailMessage.is_archived == (True if archived_view else False))  # noqa: E712
         if thread and thread.strip():
             t = thread.strip()
             base_qry = base_qry.where(EmailMessage.thread_id == t)
@@ -446,6 +444,7 @@ def index(
             base_qry = base_qry.where(EmailMessage.subject.ilike(term_s))
             qry = qry.where(EmailMessage.subject.ilike(term_s))
         if category:
+            base_qry = base_qry.where(EmailMessage.category == category)
             qry = qry.where(EmailMessage.category == category)
         mailbox_id_int: int | None = None
         if mailbox_id and mailbox_id.strip().isdigit():
@@ -492,17 +491,202 @@ def index(
             )
 
         sort_v = (sort or "date").strip().lower()
+
+        # Пагинация
+        try:
+            page_i = int((page or "").strip() or "1")
+        except Exception:
+            page_i = 1
+        if page_i < 1:
+            page_i = 1
+        try:
+            per_i = int((per or "").strip() or "50")
+        except Exception:
+            per_i = 50
+        # разумные рамки, чтобы не убить БД/рендер
+        if per_i < 10:
+            per_i = 10
+        if per_i > 200:
+            per_i = 200
+        offset_i = (page_i - 1) * per_i
+
+        total = int(s.scalar(qry.with_only_columns(func.count()).order_by(None)) or 0)
+
         if sort_v == "score":
-            qry = qry.order_by(EmailMessage.score.desc().nullslast(), EmailMessage.date.desc().nullslast(), EmailMessage.id.desc())
+            qry = qry.order_by(
+                EmailMessage.score.desc().nullslast(),
+                EmailMessage.date.desc().nullslast(),
+                EmailMessage.id.desc(),
+            )
         else:
             sort_v = "date"
             qry = qry.order_by(EmailMessage.date.desc().nullslast(), EmailMessage.id.desc())
 
+        qry = qry.offset(offset_i).limit(per_i)
         emails = list(s.scalars(qry))
-        # Дайджест "Сегодня важное" (группируем по треду/теме)
+        # "Сегодня" по локальному дню пользователя (на сервере в локальной TZ).
         now_local = dt.datetime.now().astimezone()
         start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
         start_utc = start_local.astimezone(dt.UTC)
+
+        # Сводка дня (MVP, без AI): считаем только по входящим (не архив).
+        summary_base = select(EmailMessage).where(EmailMessage.is_archived == False)  # noqa: E712
+        summary_base = summary_base.where(EmailMessage.date >= start_utc)
+
+        day_total = int(s.scalar(summary_base.with_only_columns(func.count()).order_by(None)) or 0)
+        day_new = int(
+            s.scalar(
+                summary_base.where(EmailMessage.is_read == False).with_only_columns(func.count()).order_by(None)  # noqa: E712
+            )
+            or 0
+        )
+        day_important = int(
+            s.scalar(summary_base.where(EmailMessage.category == "important").with_only_columns(func.count()).order_by(None)) or 0
+        )
+        day_newsletters = int(
+            s.scalar(summary_base.where(EmailMessage.category == "newsletter").with_only_columns(func.count()).order_by(None)) or 0
+        )
+
+        # Нужен срез сегодняшних писем для кластеризации тем.
+        # Лимитируем, чтобы не нагружать страницу при «днях с сотнями писем».
+        today_emails = list(
+            s.scalars(
+                summary_base.order_by(EmailMessage.score.desc().nullslast(), EmailMessage.date.desc().nullslast(), EmailMessage.id.desc()).limit(400)
+            )
+        )
+
+        def _sender_short(v: str | None) -> str:
+            t = (v or "").strip()
+            if not t:
+                return ""
+            m = re.search(r"<([^>]+)>", t)
+            if m:
+                return (m.group(1) or "").strip().lower()
+            return t.lower()[:120]
+
+        def _norm_subj_local(v: str | None) -> str:
+            subj = (v or "").strip()
+            subj = re.sub(r"^\s*(re|fw|fwd)\s*:\s*", "", subj, flags=re.IGNORECASE)
+            subj = re.sub(r"\s+", " ", subj).strip().lower()
+            return subj[:120]
+
+        def _cluster_key(e: EmailMessage) -> tuple[str, str]:
+            if e.thread_id:
+                return ("thread", e.thread_id)
+            return ("subject", _norm_subj_local(e.subject) or "(без темы)")
+
+        clusters: dict[tuple[str, str], dict] = {}
+        for e in today_emails:
+            k = _cluster_key(e)
+            c = clusters.get(k)
+            subj_norm = k[1]
+            if not c:
+                clusters[k] = {
+                    "kind": k[0],
+                    "key": subj_norm,
+                    "count": 1,
+                    "unread": (0 if e.is_read else 1),
+                    "important": (1 if e.category == "important" else 0),
+                    "newsletter": (1 if e.category == "newsletter" else 0),
+                    "top_subject": (e.subject or "(без темы)"),
+                    "top_email_id": e.id,
+                    "top_score": (e.score or 0),
+                    "top_hint": (e.ai_explanation or e.summary or e.snippet or "").strip()[:240],
+                    "senders": [s for s in [_sender_short(e.from_email)] if s],
+                }
+            else:
+                c["count"] += 1
+                if not e.is_read:
+                    c["unread"] += 1
+                if e.category == "important":
+                    c["important"] += 1
+                if e.category == "newsletter":
+                    c["newsletter"] += 1
+                sshort = _sender_short(e.from_email)
+                if sshort and sshort not in c["senders"] and len(c["senders"]) < 3:
+                    c["senders"].append(sshort)
+                # top: хотим «самое полезное» письмо кластера
+                score = (e.score or 0)
+                cur = (c.get("top_score") or 0, 1 if c.get("unread") else 0, c.get("top_email_id") or 0)
+                cand = (score, (1 if not e.is_read else 0), e.id)
+                if cand > cur:
+                    c["top_subject"] = (e.subject or "(без темы)")
+                    c["top_email_id"] = e.id
+                    c["top_score"] = score
+                    c["top_hint"] = (e.ai_explanation or e.summary or e.snippet or "").strip()[:240]
+
+        # Топ кластеров: сначала те, где есть непрочитанное и важное, потом по количеству.
+        clusters_list = sorted(
+            clusters.values(),
+            key=lambda x: (
+                -(1 if (x["unread"] > 0 and x["important"] > 0) else 0),
+                -(1 if x["unread"] > 0 else 0),
+                -(x["important"]),
+                -(x["count"]),
+                -(x.get("top_score") or 0),
+            ),
+        )[:8]
+
+        # Что требует внимания (простые эвристики).
+        urgent_markers = [
+            "код",
+            "подтверж",
+            "вход",
+            "парол",
+            "security",
+            "login",
+            "otp",
+            "2fa",
+            "invoice",
+            "счет",
+            "оплат",
+        ]
+        unread_important = [e for e in today_emails if (not e.is_read) and e.category == "important"]
+        unread_security = [
+            e
+            for e in today_emails
+            if (not e.is_read)
+            and any(m in f"{(e.subject or '')}\n{(e.snippet or '')}".lower() for m in urgent_markers)
+        ]
+        unread_high = [e for e in today_emails if (not e.is_read) and (e.score or 0) >= 70]
+
+        attention: list[dict] = []
+        if unread_important:
+            attention.append(
+                {
+                    "title": f"Непрочитанные важные: {len(unread_important)}",
+                    "hint": "Рекомендуется просмотреть в первую очередь.",
+                    "href": str(request.url.include_query_params(quick="today", category="important", unread="1", page="1")),
+                }
+            )
+        if unread_security:
+            attention.append(
+                {
+                    "title": f"Коды/доступы/безопасность: {len(unread_security)}",
+                    "hint": "Похоже на подтверждения входа/коды/важные действия.",
+                    "href": str(request.url.include_query_params(quick="today", unread="1", page="1")),
+                }
+            )
+        if unread_high and not unread_important:
+            attention.append(
+                {
+                    "title": f"Высокая важность (score ≥ 70): {len(unread_high)}",
+                    "hint": "Стоит проверить — высокий приоритет по оценке.",
+                    "href": str(request.url.include_query_params(quick="today", unread="1", sort="score", page="1")),
+                }
+            )
+
+        day_summary = {
+            "day_total": day_total,
+            "day_new": day_new,
+            "day_important": day_important,
+            "day_newsletters": day_newsletters,
+            "clusters": clusters_list,
+            "attention": attention[:4],
+            "start_utc_iso": start_utc.isoformat(),
+        }
+
+        # Дайджест "Сегодня важное" (группируем по треду/теме)
         today_important = list(
             s.scalars(
                 base_qry.where(
@@ -530,41 +714,50 @@ def index(
         # Удобно строить ссылки с сохранением текущих параметров.
         return str(request.url.include_query_params(**kwargs))
 
+    # Пагинация: ссылки + мета
+    pages_total = max(1, (total + per_i - 1) // per_i) if per_i else 1
+    if page_i > pages_total:
+        page_i = pages_total
+    has_prev = page_i > 1
+    has_next = page_i < pages_total
+    prev_href = _u(page=str(page_i - 1)) if has_prev else ""
+    next_href = _u(page=str(page_i + 1)) if has_next else ""
+
     view_tabs = [
-        {"id": "", "name": "Входящие", "href": _u(view="")},
-        {"id": "archive", "name": "Архив", "href": _u(view="archive")},
+        {"id": "", "name": "Входящие", "href": _u(view="", page="1")},
+        {"id": "archive", "name": "Архив", "href": _u(view="archive", page="1")},
     ]
 
-    mailbox_tabs = [{"id": "", "name": "Все", "color": "#64748b", "href": _u(mailbox_id="")}]
+    mailbox_tabs = [{"id": "", "name": "Все", "color": "#64748b", "href": _u(mailbox_id="", page="1")}]
     for m in mailboxes:
         mailbox_tabs.append(
             {
                 "id": str(m.id),
                 "name": m.name,
                 "color": mailbox_colors.get(m.id, "#64748b"),
-                "href": _u(mailbox_id=str(m.id)),
+                "href": _u(mailbox_id=str(m.id), page="1"),
             }
         )
 
     category_tabs = [
-        {"id": "", "name": "Все", "href": _u(category="")},
-        {"id": "important", "name": cat_ru["important"], "href": _u(category="important")},
-        {"id": "normal", "name": cat_ru["normal"], "href": _u(category="normal")},
-        {"id": "newsletter", "name": cat_ru["newsletter"], "href": _u(category="newsletter")},
-        {"id": "spam_candidate", "name": cat_ru["spam_candidate"], "href": _u(category="spam_candidate")},
+        {"id": "", "name": "Все", "href": _u(category="", page="1")},
+        {"id": "important", "name": cat_ru["important"], "href": _u(category="important", page="1")},
+        {"id": "normal", "name": cat_ru["normal"], "href": _u(category="normal", page="1")},
+        {"id": "newsletter", "name": cat_ru["newsletter"], "href": _u(category="newsletter", page="1")},
+        {"id": "spam_candidate", "name": cat_ru["spam_candidate"], "href": _u(category="spam_candidate", page="1")},
     ]
 
     sort_tabs = [
-        {"id": "date", "name": "По дате", "href": _u(sort="date")},
-        {"id": "score", "name": "По важности", "href": _u(sort="score")},
+        {"id": "date", "name": "По дате", "href": _u(sort="date", page="1")},
+        {"id": "score", "name": "По важности", "href": _u(sort="score", page="1")},
     ]
 
     quick_links = {
-        "unread": _u(quick="unread"),
-        "important": _u(quick="important"),
-        "today": _u(quick="today"),
-        "week": _u(quick="week"),
-        "clear_quick": _u(quick=""),
+        "unread": _u(quick="unread", page="1"),
+        "important": _u(quick="important", page="1"),
+        "today": _u(quick="today", page="1"),
+        "week": _u(quick="week", page="1"),
+        "clear_quick": _u(quick="", page="1"),
     }
 
     def _norm_subj(v: str | None) -> str:
@@ -593,14 +786,25 @@ def index(
             if (e.score or 0, e.id) > (top.score or 0, top.id):
                 g["top"] = e
 
-    today_groups = sorted(groups.values(), key=lambda x: (-(x["unread"]), -(x["count"]), -(x["top"].score or 0), -(x["top"].id)))
+    # "Сегодня важное" оставляем как actionable-блок: только группы, где есть непрочитанное.
+    today_groups = [g for g in groups.values() if (g.get("unread") or 0) > 0]
+    today_groups = sorted(today_groups, key=lambda x: (-(x["unread"]), -(x["count"]), -(x["top"].score or 0), -(x["top"].id)))
 
     return templates.TemplateResponse(
         request=request,
         name="index.html",
         context={
             "emails": emails,
+            "page": page_i,
+            "per": per_i,
+            "total": total,
+            "pages_total": pages_total,
+            "has_prev": has_prev,
+            "has_next": has_next,
+            "prev_href": prev_href,
+            "next_href": next_href,
             "today_groups": today_groups[:8],
+            "day_summary": day_summary,
             "category": category or "",
             "cat_ru": cat_ru,
             "mailboxes": mailboxes,
@@ -678,6 +882,180 @@ def api_today_group(
             return {"ok": True, "updated": ids, "archived": [], "action": "mark_read"}
         s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(is_archived=True))
         return {"ok": True, "updated": [], "archived": ids, "action": "archive"}
+
+
+@app.post("/api/day-summary")
+def api_day_summary_action(
+    action: str = Form(...),
+    mailbox_id: str | None = Form(default=None),
+) -> dict:
+    """
+    Массовые действия из блока "Сводка дня" (верх /).
+    action: mark_read_today_new | archive_today_newsletters
+    mailbox_id: опционально, чтобы действовать в рамках выбранного ящика
+    """
+    action = (action or "").strip().lower()
+    if action not in {"mark_read_today_new", "archive_today_newsletters"}:
+        return {"ok": False, "error": "invalid_action"}
+    mailbox_id_int: int | None = None
+    if mailbox_id and mailbox_id.strip().isdigit():
+        mailbox_id_int = int(mailbox_id.strip())
+
+    now_local = dt.datetime.now().astimezone()
+    start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_utc = start_local.astimezone(dt.UTC)
+
+    base = select(EmailMessage.id).where(EmailMessage.is_archived == False, EmailMessage.date >= start_utc)  # noqa: E712
+    if mailbox_id_int:
+        base = base.where(EmailMessage.mailbox_id == mailbox_id_int)
+
+    updated: list[int] = []
+    archived: list[int] = []
+    with session_scope() as s:
+        if action == "mark_read_today_new":
+            ids = list(s.scalars(base.where(EmailMessage.is_read == False)))  # noqa: E712
+            if ids:
+                s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(is_read=True))
+                updated = ids
+                q = get_queue()
+                for eid in ids:
+                    q.enqueue(sync_remote_mark_read, eid)
+        else:
+            ids = list(s.scalars(base.where(EmailMessage.category == "newsletter")))
+            if ids:
+                s.execute(update(EmailMessage).where(EmailMessage.id.in_(ids)).values(is_archived=True))
+                archived = ids
+
+    return {"ok": True, "updated": updated, "archived": archived, "action": action}
+
+
+@app.post("/api/day-summary-ai")
+def api_day_summary_ai() -> dict:
+    """
+    AI-выжимка дня: один запрос к модели на основе кластеров сегодняшней почты.
+    Ничего не применяем автоматически — только текст/предложения.
+    """
+    from app.ai_client import summarize_day_digest
+
+    now_local = dt.datetime.now().astimezone()
+    start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_utc = start_local.astimezone(dt.UTC)
+
+    with session_scope() as s:
+        base = select(EmailMessage).where(EmailMessage.is_archived == False, EmailMessage.date >= start_utc)  # noqa: E712
+        day_total = int(s.scalar(base.with_only_columns(func.count()).order_by(None)) or 0)
+        day_new = int(s.scalar(base.where(EmailMessage.is_read == False).with_only_columns(func.count()).order_by(None)) or 0)  # noqa: E712
+        day_important = int(
+            s.scalar(base.where(EmailMessage.category == "important").with_only_columns(func.count()).order_by(None)) or 0
+        )
+        day_newsletters = int(
+            s.scalar(base.where(EmailMessage.category == "newsletter").with_only_columns(func.count()).order_by(None)) or 0
+        )
+
+        today_emails = list(
+            s.scalars(
+                base.order_by(EmailMessage.score.desc().nullslast(), EmailMessage.date.desc().nullslast(), EmailMessage.id.desc()).limit(400)
+            )
+        )
+
+    # Собираем кластеры так же, как на главной (упрощённо, без дубля логики UI).
+    def _sender_short(v: str | None) -> str:
+        t = (v or "").strip()
+        if not t:
+            return ""
+        m = re.search(r"<([^>]+)>", t)
+        if m:
+            return (m.group(1) or "").strip().lower()
+        return t.lower()[:120]
+
+    def _norm_subj_local(v: str | None) -> str:
+        subj = (v or "").strip()
+        subj = re.sub(r"^\s*(re|fw|fwd)\s*:\s*", "", subj, flags=re.IGNORECASE)
+        subj = re.sub(r"\s+", " ", subj).strip().lower()
+        return subj[:120]
+
+    def _cluster_key(e: EmailMessage) -> tuple[str, str]:
+        if e.thread_id:
+            return ("thread", e.thread_id)
+        return ("subject", _norm_subj_local(e.subject) or "(без темы)")
+
+    clusters: dict[tuple[str, str], dict] = {}
+    for e in today_emails:
+        k = _cluster_key(e)
+        c = clusters.get(k)
+        if not c:
+            clusters[k] = {
+                "kind": k[0],
+                "key": k[1],
+                "count": 1,
+                "unread": (0 if e.is_read else 1),
+                "important": (1 if e.category == "important" else 0),
+                "newsletter": (1 if e.category == "newsletter" else 0),
+                "top_subject": (e.subject or "(без темы)"),
+                "top_email_id": e.id,
+                "top_score": (e.score or 0),
+                "top_hint": (e.ai_explanation or e.summary or e.snippet or "").strip()[:240],
+                "senders": [s for s in [_sender_short(e.from_email)] if s],
+            }
+        else:
+            c["count"] += 1
+            if not e.is_read:
+                c["unread"] += 1
+            if e.category == "important":
+                c["important"] += 1
+            if e.category == "newsletter":
+                c["newsletter"] += 1
+            sshort = _sender_short(e.from_email)
+            if sshort and sshort not in c["senders"] and len(c["senders"]) < 3:
+                c["senders"].append(sshort)
+            score = (e.score or 0)
+            cur = (c.get("top_score") or 0, (1 if c["unread"] > 0 else 0), c.get("top_email_id") or 0)
+            cand = (score, (1 if not e.is_read else 0), e.id)
+            if cand > cur:
+                c["top_subject"] = (e.subject or "(без темы)")
+                c["top_email_id"] = e.id
+                c["top_score"] = score
+                c["top_hint"] = (e.ai_explanation or e.summary or e.snippet or "").strip()[:240]
+
+    clusters_list = sorted(
+        clusters.values(),
+        key=lambda x: (
+            -(1 if (x["unread"] > 0 and x["important"] > 0) else 0),
+            -(1 if x["unread"] > 0 else 0),
+            -(x["important"]),
+            -(x["count"]),
+            -(x.get("top_score") or 0),
+        ),
+    )[:10]
+
+    try:
+        digest = summarize_day_digest(
+            stats={
+                "total": day_total,
+                "unread": day_new,
+                "important": day_important,
+                "newsletters": day_newsletters,
+            },
+            clusters=clusters_list,
+        )
+        return {"ok": True, "digest": digest}
+    except Exception as e:
+        # Не ломаем UI: отдаём fallback, который всё равно полезен.
+        return {
+            "ok": True,
+            "digest": {
+                "headline": f"Сегодня: всего {day_total}, непрочитано {day_new}, важных {day_important}, рассылок {day_newsletters}.",
+                "bullets": [
+                    f"Темы дня: {', '.join([(c.get('top_subject') or '').strip()[:60] for c in clusters_list[:6] if (c.get('top_subject') or '').strip()])}"
+                    or "Темы дня: —"
+                ],
+                "actions": [
+                    {"id": "mark_read_today_new", "title": "Прочитано: все непрочитанные за сегодня"},
+                    {"id": "archive_today_newsletters", "title": "В архив: рассылки за сегодня"},
+                ],
+                "error": str(e)[:300],
+            },
+        }
 
 
 @app.post("/actions/email/{email_id}/archive")
@@ -992,6 +1370,92 @@ def settings_page(request: Request) -> HTMLResponse:
             "ui_error": ui_error,
         },
     )
+
+
+@app.get("/api/ai-run-status")
+def api_ai_run_status() -> dict:
+    """
+    Живой монитор AI-обработки для UI (/settings): статус из Redis + состояние очередей RQ.
+    Также "разлипает" running-статус, если job исчезла, а heartbeat давно не обновлялся.
+    """
+    q = get_queue()
+    run = get_ai_run_status() or AiRunStatus(running=False, message="Ещё не запускалось")
+
+    started_registry = StartedJobRegistry(q.name, connection=q.connection)
+    scheduled_registry = ScheduledJobRegistry(q.name, connection=q.connection)
+    deferred_registry = DeferredJobRegistry(q.name, connection=q.connection)
+    queue_pending = q.count + len(scheduled_registry.get_job_ids()) + len(deferred_registry.get_job_ids())
+    queue_started = len(started_registry.get_job_ids())
+
+    def _parse_iso(s: str) -> dt.datetime | None:
+        if not s:
+            return None
+        try:
+            return dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    now = dt.datetime.now(dt.UTC)
+    started_dt = _parse_iso(run.started_at)
+    updated_dt = _parse_iso(getattr(run, "updated_at", "") or "")
+
+    status_label = "Не выполняется"
+    if run and run.message == "В очереди":
+        status_label = "В очереди"
+    elif run and run.running:
+        status_label = "В процессе"
+
+    status_detail = ""
+    if run and run.message and run.message not in {"", status_label, "В очереди"}:
+        status_detail = run.message
+
+    status_mismatch = bool(run and run.running and (queue_pending + queue_started == 0))
+
+    # Если job "running", но очереди пустые и heartbeat не обновлялся давно — считаем, что job умерла.
+    # Это убирает зависания в UI без ручного refresh.
+    if status_mismatch:
+        last_hb = updated_dt or started_dt
+        if last_hb and (now - last_hb).total_seconds() >= 30:
+            run = AiRunStatus(
+                running=False,
+                started_at=run.started_at,
+                updated_at=now_iso(),
+                finished_at=now_iso(),
+                total=run.total,
+                processed=run.processed,
+                ok=run.ok,
+                failed=run.failed,
+                message="Завершено (монитор)",
+            )
+            try:
+                set_ai_run_status(run)
+            except Exception:
+                pass
+            status_label = "Не выполняется"
+            status_detail = run.message
+            status_mismatch = False
+
+    return {
+        "ok": True,
+        "run": {
+            "running": bool(run.running),
+            "started_at": run.started_at or "",
+            "updated_at": getattr(run, "updated_at", "") or "",
+            "finished_at": run.finished_at or "",
+            "total": int(run.total or 0),
+            "processed": int(run.processed or 0),
+            "ok": int(run.ok or 0),
+            "failed": int(run.failed or 0),
+            "message": run.message or "",
+        },
+        "ui": {
+            "status_label": status_label,
+            "status_detail": status_detail,
+            "status_mismatch": bool(status_mismatch),
+            "queue_pending": int(queue_pending),
+            "queue_started": int(queue_started),
+        },
+    }
 
 
 @app.post("/actions/mailbox/add-imap")

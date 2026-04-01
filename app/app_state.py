@@ -87,6 +87,7 @@ def now_iso() -> str:
 class AiRunStatus:
     running: bool
     started_at: str = ""
+    updated_at: str = ""
     finished_at: str = ""
     total: int = 0
     processed: int = 0
@@ -108,6 +109,7 @@ def get_ai_run_status() -> AiRunStatus | None:
         return AiRunStatus(
             running=bool(d.get("running")),
             started_at=str(d.get("started_at") or ""),
+            updated_at=str(d.get("updated_at") or ""),
             finished_at=str(d.get("finished_at") or ""),
             total=int(d.get("total") or 0),
             processed=int(d.get("processed") or 0),

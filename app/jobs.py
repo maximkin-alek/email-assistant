@@ -641,7 +641,18 @@ def ai_run(limit: int = 50) -> dict:
     """
     started_at = now_iso()
     set_ai_stop_flag(False)
-    set_ai_run_status(AiRunStatus(running=True, started_at=started_at, total=0, processed=0, ok=0, failed=0, message="Запущено"))
+    set_ai_run_status(
+        AiRunStatus(
+            running=True,
+            started_at=started_at,
+            updated_at=now_iso(),
+            total=0,
+            processed=0,
+            ok=0,
+            failed=0,
+            message="Запущено",
+        )
+    )
     with session_scope() as s:
         ids = list(
             s.scalars(
@@ -659,7 +670,18 @@ def ai_run(limit: int = 50) -> dict:
     processed = 0
     ok = 0
     failed = 0
-    set_ai_run_status(AiRunStatus(running=True, started_at=started_at, total=total, processed=0, ok=0, failed=0, message="В процессе"))
+    set_ai_run_status(
+        AiRunStatus(
+            running=True,
+            started_at=started_at,
+            updated_at=now_iso(),
+            total=total,
+            processed=0,
+            ok=0,
+            failed=0,
+            message="В процессе",
+        )
+    )
 
     for email_id in ids:
         if get_ai_stop_flag():
@@ -667,6 +689,7 @@ def ai_run(limit: int = 50) -> dict:
                 AiRunStatus(
                     running=False,
                     started_at=started_at,
+                    updated_at=now_iso(),
                     finished_at=now_iso(),
                     total=total,
                     processed=processed,
@@ -687,6 +710,7 @@ def ai_run(limit: int = 50) -> dict:
                 AiRunStatus(
                     running=True,
                     started_at=started_at,
+                    updated_at=now_iso(),
                     total=total,
                     processed=processed,
                     ok=ok,
@@ -699,6 +723,7 @@ def ai_run(limit: int = 50) -> dict:
         AiRunStatus(
             running=False,
             started_at=started_at,
+            updated_at=now_iso(),
             finished_at=now_iso(),
             total=total,
             processed=processed,

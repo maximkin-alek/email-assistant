@@ -19,6 +19,135 @@ class AiResult:
     model: str
 
 
+def summarize_day_digest(*, stats: dict, clusters: list[dict]) -> dict:
+    """
+    Один AI-запрос на «выжимку дня» по кластерам.
+    Возвращает dict: {headline: str, bullets: [str], actions: [{id,title}], model: str}.
+    """
+    if not settings.ai_api_key:
+        raise RuntimeError("AI_API_KEY не задан в .env")
+
+    base = settings.ai_base_url.rstrip("/")
+    url = f"{base}/chat/completions"
+    model = settings.ai_model
+
+    def _clip(s: str, n: int) -> str:
+        s = (s or "").strip()
+        return s if len(s) <= n else s[:n].rstrip() + "…"
+
+    stats_txt = (
+        f"total={int(stats.get('total') or 0)}, "
+        f"unread={int(stats.get('unread') or 0)}, "
+        f"important={int(stats.get('important') or 0)}, "
+        f"newsletters={int(stats.get('newsletters') or 0)}"
+    )
+    lines: list[str] = []
+    for i, c in enumerate(clusters[:10], start=1):
+        subj = _clip(str(c.get("top_subject") or ""), 90) or "(без темы)"
+        hint = _clip(str(c.get("top_hint") or ""), 160)
+        senders = ", ".join([_clip(str(x), 40) for x in (c.get("senders") or [])[:3] if str(x).strip()])
+        lines.append(
+            f"{i}. subj={subj}; count={int(c.get('count') or 0)}; unread={int(c.get('unread') or 0)}; "
+            f"important={int(c.get('important') or 0)}; newsletter={int(c.get('newsletter') or 0)}; "
+            f"senders={senders or '-'}; hint={hint or '-'}"
+        )
+
+    instruction = (
+        "Ты виртуальный секретарь. Проанализируй кластеры писем за сегодня и дай выжимку.\n"
+        "Ответь ТОЛЬКО JSON (одной строкой, без markdown/текста вокруг).\n"
+        "Схема:\n"
+        "{\n"
+        '  "headline": "1-2 предложения, максимум 35-40 слов",\n'
+        '  "bullets": ["5-8 коротких буллетов по темам дня, без перечисления всех писем"],\n'
+        '  "actions": [{"id":"mark_read_today_new|archive_today_newsletters","title":"коротко"}]\n'
+        "}\n"
+        "Запрещено: предлагать интернет-поиск, просить уточнения, писать мета-текст.\n"
+        "Данные:\n"
+        f"stats: {stats_txt}\n"
+        "clusters:\n"
+        + "\n".join(lines)
+    )
+
+    timeout = httpx.Timeout(connect=5.0, read=20.0, write=10.0, pool=5.0)
+    with httpx.Client(timeout=timeout) as client:
+        body = {
+            "model": model,
+            "messages": [{"role": "user", "content": instruction}],
+            "temperature": 0.2,
+            "response_format": {"type": "json_object"},
+        }
+        resp = client.post(
+            url,
+            headers={"Authorization": f"Bearer {settings.ai_api_key}", "Content-Type": "application/json"},
+            json=body,
+        )
+        if resp.status_code == 400:
+            # провайдер может не поддерживать response_format
+            body.pop("response_format", None)
+            resp = client.post(
+                url,
+                headers={"Authorization": f"Bearer {settings.ai_api_key}", "Content-Type": "application/json"},
+                json=body,
+            )
+        resp.raise_for_status()
+        data = resp.json()
+
+    used_model = model
+    try:
+        m = data.get("model")
+        if isinstance(m, str) and m.strip():
+            used_model = m.strip()
+    except Exception:
+        pass
+
+    content = None
+    try:
+        content = data["choices"][0]["message"]["content"]
+    except Exception:
+        content = None
+    if not isinstance(content, str) or not content.strip():
+        raise RuntimeError("AI вернул пустой content")
+    txt = content.strip()
+    try:
+        obj = json.loads(txt)
+    except Exception:
+        start = txt.find("{")
+        end = txt.rfind("}")
+        obj = json.loads(txt[start : end + 1]) if (start != -1 and end != -1 and end > start) else {}
+    if not isinstance(obj, dict):
+        raise RuntimeError("AI вернул не-объект JSON")
+
+    headline = _limit_text_two_sentences(str(obj.get("headline") or "").strip(), max_words=40)
+    bullets = obj.get("bullets") if isinstance(obj.get("bullets"), list) else []
+    bullets_out = []
+    for b in bullets[:8]:
+        if isinstance(b, str) and b.strip():
+            bullets_out.append(_clip(b.strip(), 180))
+    actions = obj.get("actions") if isinstance(obj.get("actions"), list) else []
+    actions_out = []
+    for a in actions[:3]:
+        if not isinstance(a, dict):
+            continue
+        aid = str(a.get("id") or "").strip()
+        title = _clip(str(a.get("title") or "").strip(), 80)
+        if aid in {"mark_read_today_new", "archive_today_newsletters"} and title:
+            actions_out.append({"id": aid, "title": title})
+
+    if not headline:
+        headline = f"Сегодня: всего {int(stats.get('total') or 0)}, непрочитано {int(stats.get('unread') or 0)}."
+
+    if not bullets_out:
+        bullets_out = ["AI не дал буллеты — используйте кластеры ниже."]
+
+    if not actions_out:
+        actions_out = [
+            {"id": "mark_read_today_new", "title": "Прочитано: все непрочитанные за сегодня"},
+            {"id": "archive_today_newsletters", "title": "В архив: рассылки за сегодня"},
+        ]
+
+    return {"headline": headline, "bullets": bullets_out, "actions": actions_out, "model": used_model}
+
+
 def _clamp_score(score: int) -> int:
     return max(0, min(100, int(score)))
 
