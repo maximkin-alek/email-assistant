@@ -984,6 +984,23 @@
               if (pill) pill.textContent = "синхронизация…";
               if (syncBtn) syncBtn.textContent = "Синхронизация…";
 
+              function fmtIsoLocal(iso) {
+                try {
+                  if (!iso) return "";
+                  const d = new Date(iso);
+                  if (Number.isNaN(d.getTime())) return "";
+                  return new Intl.DateTimeFormat("ru-RU", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }).format(d);
+                } catch (_) {
+                  return "";
+                }
+              }
+
               const t0 = Date.now();
               while (Date.now() - t0 < 60000) {
                 await new Promise((r) => setTimeout(r, 1500));
@@ -1001,7 +1018,7 @@
                     const el = pill.querySelector("[data-dt='1'][data-iso]");
                     if (el) {
                       const iso = el.getAttribute("data-iso") || "";
-                      const t = (typeof fmtIso === "function") ? fmtIso(iso) : "";
+                      const t = fmtIsoLocal(iso);
                       if (t) el.textContent = t;
                     }
                   } else {
