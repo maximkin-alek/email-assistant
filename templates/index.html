@@ -362,6 +362,7 @@
           <form method="post" action="/actions/sync-all" data-ajax="1" data-api="/api/sync-all" style="margin:0;">
             <button class="btn" type="submit" id="syncBtn">Синхронизировать</button>
           </form>
+          <button class="btn" type="button" id="refreshBtn" title="Обновить список писем без перезагрузки">Обновить</button>
           {% if last_sync_at %}
             <span class="pill" id="lastSyncPill" title="Последняя синхронизация">синк: <span data-dt="1" data-iso="{{ last_sync_at.isoformat() }}">…</span></span>
           {% else %}
@@ -671,154 +672,107 @@
       </div>
     </form>
 
-    <div class="grid">
-      <div class="card" style="padding:10px 12px;">
-        <div class="meta" style="justify-content: space-between;">
-          <div class="meta">
-            <span class="pill">Страница: {{ page }} / {{ pages_total }}</span>
-            <span class="pill">Писем: {{ total }}</span>
-            <span class="pill" style="display:flex; gap:8px; align-items:center;">
-              На странице:
-              <select class="select" style="padding:4px 8px;" onchange="setPer(this.value)">
-                <option value="20" {% if per == 20 %}selected{% endif %}>20</option>
-                <option value="50" {% if per == 50 %}selected{% endif %}>50</option>
-                <option value="100" {% if per == 100 %}selected{% endif %}>100</option>
-                <option value="200" {% if per == 200 %}selected{% endif %}>200</option>
-              </select>
-            </span>
-          </div>
-          <div class="meta">
-            {% if has_prev %}
-              <a class="btn" href="{{ prev_href }}">← Назад</a>
-            {% else %}
-              <span class="pill">← Назад</span>
-            {% endif %}
-            {% if has_next %}
-              <a class="btn" href="{{ next_href }}">Вперёд →</a>
-            {% else %}
-              <span class="pill">Вперёд →</span>
-            {% endif %}
-          </div>
-        </div>
-      </div>
-
-      {% if emails|length == 0 %}
-        <div class="card">
-          <div style="font-weight: 900; font-size: 16px;">Писем пока нет</div>
-          <div class="subtitle">Если ты недавно архивировал рассылки/письма — проверь вкладку “Архив”. Также можно сбросить фильтры.</div>
-          <div class="meta" style="margin-top: 10px;">
-            <a class="btn" href="/?view=archive&page=1">Открыть архив</a>
-            <a class="btn" href="/?page=1">Сбросить фильтры</a>
-            <a class="btn" href="/settings">Настройки</a>
-          </div>
-        </div>
-      {% endif %}
-
-      {% for e in emails %}
-        <div class="card
-          {% if e.category=='important' %}cat-important{% endif %}
-          {% if e.category=='newsletter' %}cat-newsletter{% endif %}
-          {% if e.category=='spam_candidate' %}cat-spam{% endif %}
-          {% if not e.is_read %}unread-card{% endif %}"
-          style="--mb: {{ mailbox_colors.get(e.mailbox_id, '#94a3b8') }};">
-          <div class="meta">
-            <label class="pill" style="display:flex; gap:8px; align-items:center;">
-              <input class="msg-check" type="checkbox" form="bulkForm" name="ids" value="{{ e.id }}" data-is-read="{% if e.is_read %}1{% else %}0{% endif %}" />
-              выбрать
-            </label>
-            {% if e.category=='important' %}<span class="flag important">Важно</span>{% endif %}
-            {% if not e.is_read %}<span class="flag unread">Непрочитано</span>{% endif %}
-            {% if e.category != 'important' %}
-              <span class="pill {% if e.category=='newsletter' %}teal{% elif e.category=='spam_candidate' %}danger{% else %}{% endif %}">{{ cat_ru.get(e.category or '', e.category or "—") }}</span>
-            {% endif %}
-            <span class="pill">Оценка: {{ e.score or "—" }}</span>
-            <span class="pill">
-              ящик:
-              {% set mb = mailbox_map.get(e.mailbox_id) %}
-              {% if mb %}{{ mb.name }} ({{ mb.provider }}){% else %}#{{ e.mailbox_id }}{% endif %}
-            </span>
-          </div>
-          <div class="subject-line">
-            <a class="subject-text {% if not e.is_read %}unread{% endif %}" data-nav="1" href="/email/{{ e.id }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">{{ (e.subject or "(без темы)")|rfc2047 }}</a>
-            <div class="date">{% if e.date %}<span data-rel="1" data-iso="{{ e.date.isoformat() }}">…</span>{% endif %}</div>
-          </div>
-          <div class="meta fromline">
-            <span class="avatar" data-avatar="1" data-from="{{ (e.from_email or '—')|rfc2047 }}">?</span>
-            <span class="muted">From:</span>
-            <span>{{ (e.from_email or "—")|rfc2047 }}</span>
-          </div>
-          <div class="actions">
-            <form method="post" action="/actions/email/{{ e.id }}/archive" data-ajax="1" data-api="/api/email/{{ e.id }}/archive" style="margin:0;">
-              <button class="btn" type="submit">Архив</button>
-            </form>
-            <form method="post" action="/actions/email/{{ e.id }}/mark-read" data-ajax="1" data-api="/api/email/{{ e.id }}/mark-read" style="margin:0;">
-              <button class="btn" type="submit">Прочитано</button>
-            </form>
-            <form method="post" action="/actions/email/{{ e.id }}/set-category?category=important" data-ajax="1" data-api="/api/email/{{ e.id }}/set-category" data-category="important" style="margin:0;">
-              <input type="hidden" name="category" value="important" />
-              <button class="btn" type="submit">Важно</button>
-            </form>
-            <form method="post" action="/actions/email/{{ e.id }}/set-category?category=newsletter" data-ajax="1" data-api="/api/email/{{ e.id }}/set-category" data-category="newsletter" style="margin:0;">
-              <input type="hidden" name="category" value="newsletter" />
-              <button class="btn" type="submit">Рассылка</button>
-            </form>
-            <form method="post" action="/actions/email/{{ e.id }}/set-category?category=spam_candidate" data-ajax="1" data-api="/api/email/{{ e.id }}/set-category" data-category="spam_candidate" style="margin:0;">
-              <input type="hidden" name="category" value="spam_candidate" />
-              <button class="btn" type="submit">Спам?</button>
-            </form>
-          </div>
-          {% if e.summary %}
-            <p class="snippet">{{ e.summary }}</p>
-          {% elif e.snippet %}
-            <p class="snippet">{{ e.snippet }}</p>
-          {% endif %}
-          {% if e.ai_explanation %}
-            <div class="ai-note">
-              <div class="lbl">AI комментарий</div>
-              <div class="txt">{{ e.ai_explanation }}</div>
-            </div>
-          {% endif %}
-
-          {# Полный просмотр теперь на странице письма (/email/{id}) #}
-        </div>
-      {% endfor %}
-
-      {% if emails|length > 0 %}
-        <div class="card" style="padding:10px 12px;">
-          <div class="meta" style="justify-content: space-between;">
-            <div class="meta">
-              <span class="pill">Страница: {{ page }} / {{ pages_total }}</span>
-              <span class="pill">Писем: {{ total }}</span>
-              <span class="pill" style="display:flex; gap:8px; align-items:center;">
-                На странице:
-                <select class="select" style="padding:4px 8px;" onchange="setPer(this.value)">
-                  <option value="20" {% if per == 20 %}selected{% endif %}>20</option>
-                  <option value="50" {% if per == 50 %}selected{% endif %}>50</option>
-                  <option value="100" {% if per == 100 %}selected{% endif %}>100</option>
-                  <option value="200" {% if per == 200 %}selected{% endif %}>200</option>
-                </select>
-              </span>
-            </div>
-            <div class="meta">
-              {% if has_prev %}
-                <a class="btn" href="{{ prev_href }}">← Назад</a>
-              {% else %}
-                <span class="pill">← Назад</span>
-              {% endif %}
-              {% if has_next %}
-                <a class="btn" href="{{ next_href }}">Вперёд →</a>
-              {% else %}
-                <span class="pill">Вперёд →</span>
-              {% endif %}
-            </div>
-          </div>
-        </div>
-      {% endif %}
+    <div id="emailList">
+      {% include "partials/email_list.html" %}
     </div>
     </div>
 
     <script>
       (function () {
+        async function refreshEmailList() {
+          const holder = document.getElementById("emailList");
+          if (!holder) return;
+          holder.style.opacity = "0.65";
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.set("fragment", "emails");
+            const r = await fetch(url.toString(), { headers: { "Accept": "text/html" }, cache: "no-store" });
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            const html = await r.text();
+            holder.innerHTML = html;
+
+            // минимальная переинициализация динамики (даты/аватары/цвета)
+            function fmtIsoLocal(iso, full) {
+              try {
+                if (!iso) return "";
+                const d = new Date(iso);
+                if (Number.isNaN(d.getTime())) return "";
+                const opt = full
+                  ? { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit", second:"2-digit" }
+                  : { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" };
+                return new Intl.DateTimeFormat("ru-RU", opt).format(d);
+              } catch (_) { return ""; }
+            }
+            function relLabel(d) {
+              try {
+                const now = new Date();
+                const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                const startOfMsg = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+                const diffDays = Math.floor((startOfToday - startOfMsg) / 86400000);
+                if (diffDays === 0) return "сегодня";
+                if (diffDays === 1) return "вчера";
+                if (diffDays > 1 && diffDays < 7) return diffDays + " дн. назад";
+                return "";
+              } catch (_) { return ""; }
+            }
+
+            holder.querySelectorAll("[data-dt='1'][data-iso]").forEach((el) => {
+              const iso = el.getAttribute("data-iso") || "";
+              const t = fmtIsoLocal(iso, true);
+              if (t) el.textContent = t;
+            });
+            holder.querySelectorAll("[data-rel='1'][data-iso]").forEach((el) => {
+              const iso = el.getAttribute("data-iso") || "";
+              const d = new Date(iso);
+              if (Number.isNaN(d.getTime())) return;
+              const full = fmtIsoLocal(iso, true);
+              const rel = relLabel(d);
+              if (rel) el.textContent = rel;
+              if (full) el.title = full;
+            });
+            holder.querySelectorAll("[data-mbcolor]").forEach((el) => {
+              const c = el.getAttribute("data-mbcolor") || "";
+              if (c) el.style.background = c;
+            });
+            // аватары
+            function hashStr(s) {
+              let h = 2166136261;
+              const v = (s || "");
+              for (let i = 0; i < v.length; i++) {
+                h ^= v.charCodeAt(i);
+                h = Math.imul(h, 16777619);
+              }
+              return h >>> 0;
+            }
+            function pickInitials(from) {
+              const s = (from || "").trim();
+              const m = s.match(/<([^>]+)>/);
+              const email = (m ? m[1] : s).trim();
+              if (!email) return "?";
+              const namePart = email.split("@")[0] || email;
+              const chunks = namePart.replace(/[^a-zA-Z0-9а-яА-Я]+/g, " ").trim().split(/\s+/).filter(Boolean);
+              const a = (chunks[0] || namePart)[0] || "?";
+              const b = (chunks[1] || "")[0] || "";
+              return (a + b).toUpperCase();
+            }
+            function colorFor(from) {
+              const h = hashStr(from || "");
+              const hue = (h % 360);
+              return `hsl(${hue} 70% 45%)`;
+            }
+            holder.querySelectorAll("[data-avatar='1']").forEach((el) => {
+              const from = el.getAttribute("data-from") || "";
+              el.textContent = pickInitials(from);
+              el.style.background = colorFor(from);
+              el.title = from;
+            });
+          } catch (_) {
+            // на ошибке — не зависаем, просто оставляем текущее
+          } finally {
+            holder.style.opacity = "";
+          }
+        }
+
         const checks = Array.from(document.querySelectorAll(".msg-check"));
         const countEl = document.getElementById("selCount");
         const bulkbar = document.querySelector(".bulkbar");
@@ -1029,6 +983,8 @@
                 break;
               }
               if (syncBtn) syncBtn.textContent = "Синхронизировать";
+              // После синхронизации обновим список писем (без перезагрузки).
+              refreshEmailList();
             }
             if (url === "/api/day-summary") {
               // Массовые действия из "Сводки дня": обновим страницу, чтобы пересчитались цифры и кластеры.
@@ -1041,6 +997,10 @@
             alert("Не удалось выполнить действие. Попробуй ещё раз.");
           }
         }, true);
+
+        // Ручное обновление списка без перезагрузки
+        const refreshBtn = document.getElementById("refreshBtn");
+        if (refreshBtn) refreshBtn.addEventListener("click", refreshEmailList);
       })();
     </script>
 

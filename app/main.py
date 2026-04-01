@@ -406,6 +406,7 @@ def index(
     view: str | None = None,
     page: str | None = None,
     per: str | None = None,
+    fragment: str | None = None,
 ) -> HTMLResponse:
     with session_scope() as s:
         mailboxes = list(s.scalars(select(Mailbox).order_by(Mailbox.id.asc())))
@@ -793,6 +794,31 @@ def index(
     # "Сегодня важное" оставляем как actionable-блок: только группы, где есть непрочитанное.
     today_groups = [g for g in groups.values() if (g.get("unread") or 0) > 0]
     today_groups = sorted(today_groups, key=lambda x: (-(x["unread"]), -(x["count"]), -(x["top"].score or 0), -(x["top"].id)))
+
+    if (fragment or "").strip().lower() in {"emails", "email_list", "list"}:
+        return templates.TemplateResponse(
+            request=request,
+            name="partials/email_list.html",
+            context={
+                "emails": emails,
+                "page": page_i,
+                "per": per_i,
+                "total": total,
+                "pages_total": pages_total,
+                "has_prev": has_prev,
+                "has_next": has_next,
+                "prev_href": prev_href,
+                "next_href": next_href,
+                "category": category or "",
+                "cat_ru": cat_ru,
+                "mailboxes": mailboxes,
+                "mailbox_map": mailbox_map,
+                "mailbox_colors": mailbox_colors,
+                "mailbox_id": mailbox_id_int or "",
+                "view": view_v,
+                "archived_view": archived_view,
+            },
+        )
 
     return templates.TemplateResponse(
         request=request,
