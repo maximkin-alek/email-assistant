@@ -71,6 +71,12 @@
         .top > div:last-child .btnhelp{ width: 100%; }
         .top > div:last-child .btnhelp .btn{ flex: 1 1 auto; width: 100%; }
       }
+      @media (max-width: 480px) {
+        .btnhelp{ width: 100%; }
+        .btnhelp form{ flex: 1 1 auto; width: 100%; }
+        .btnhelp .btn{ width: 100%; }
+        .btnhelp .help{ flex: 0 0 auto; }
+      }
       @media (max-width: 768px) {
         .card .meta{ align-items: flex-start; }
         .card .meta > div[style*="justify-content: space-between"]{
@@ -397,10 +403,12 @@
       <div class="card">
         <div class="meta" style="justify-content: space-between;">
           <div class="title" style="font-size:16px;">Синхронизация ящиков</div>
-          <form method="post" action="/actions/sync-all" style="margin:0;">
-            <button class="btn" type="submit">Синхронизировать всё</button>
-          </form>
-          <span class="help" tabindex="0" data-tip="Запускает синхронизацию всех включённых ящиков.\nЕсли писем не видно — проверь вкладку «Архив» и фильтры во «Входящих».">?</span>
+          <div class="btnhelp">
+            <form method="post" action="/actions/sync-all">
+              <button class="btn" type="submit">Синхронизировать всё</button>
+            </form>
+            <span class="help" tabindex="0" data-tip="Запускает синхронизацию всех включённых ящиков.\nЕсли писем не видно — проверь вкладку «Архив» и фильтры во «Входящих».">?</span>
+          </div>
         </div>
 
         <div class="grid" style="margin-top: 12px;">
