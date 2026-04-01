@@ -972,19 +972,43 @@ def api_day_summary_ai() -> dict:
     start_utc = start_local.astimezone(dt.UTC)
 
     with session_scope() as s:
-        base = select(EmailMessage).where(EmailMessage.is_archived == False, EmailMessage.date >= start_utc)  # noqa: E712
-        day_total = int(s.scalar(base.with_only_columns(func.count()).order_by(None)) or 0)
-        day_new = int(s.scalar(base.where(EmailMessage.is_read == False).with_only_columns(func.count()).order_by(None)) or 0)  # noqa: E712
-        day_important = int(
-            s.scalar(base.where(EmailMessage.category == "important").with_only_columns(func.count()).order_by(None)) or 0
-        )
-        day_newsletters = int(
-            s.scalar(base.where(EmailMessage.category == "newsletter").with_only_columns(func.count()).order_by(None)) or 0
+        # Важно: "пришло сегодня" = все письма за сутки, включая архив.
+        base_all = select(EmailMessage).where(EmailMessage.date >= start_utc)
+        base_inbox = base_all.where(EmailMessage.is_archived == False)  # noqa: E712
+
+        day_total_all = int(s.scalar(base_all.with_only_columns(func.count()).order_by(None)) or 0)
+        day_total_inbox = int(s.scalar(base_inbox.with_only_columns(func.count()).order_by(None)) or 0)
+        day_archived = max(0, day_total_all - day_total_inbox)
+
+        # Непрочитанное имеет смысл считать по "входящим" (в архиве обычно уже "закрыто").
+        day_unread_inbox = int(
+            s.scalar(base_inbox.where(EmailMessage.is_read == False).with_only_columns(func.count()).order_by(None)) or 0  # noqa: E712
         )
 
+        # Категории считаем по всем письмам за сегодня (иначе будет казаться, что их "не было", если они в архиве).
+        day_important_all = int(
+            s.scalar(base_all.where(EmailMessage.category == "important").with_only_columns(func.count()).order_by(None)) or 0
+        )
+        day_newsletters_all = int(
+            s.scalar(base_all.where(EmailMessage.category == "newsletter").with_only_columns(func.count()).order_by(None)) or 0
+        )
+
+        # Для кластеров отдаём "фокусный" набор: важное/непрочитанное/высокий скор.
+        # Остальные письма учитываются в статистике, но не раздувают контекст.
+        focus = base_all.where(
+            or_(
+                EmailMessage.category == "important",
+                EmailMessage.is_read == False,  # noqa: E712
+                EmailMessage.score >= 70,
+            )
+        )
         today_emails = list(
             s.scalars(
-                base.order_by(EmailMessage.score.desc().nullslast(), EmailMessage.date.desc().nullslast(), EmailMessage.id.desc()).limit(400)
+                focus.order_by(
+                    EmailMessage.score.desc().nullslast(),
+                    EmailMessage.date.desc().nullslast(),
+                    EmailMessage.id.desc(),
+                ).limit(400)
             )
         )
 
@@ -1065,10 +1089,12 @@ def api_day_summary_ai() -> dict:
     try:
         digest = summarize_day_digest(
             stats={
-                "total": day_total,
-                "unread": day_new,
-                "important": day_important,
-                "newsletters": day_newsletters,
+                "total_all": day_total_all,
+                "total_inbox": day_total_inbox,
+                "archived": day_archived,
+                "unread_inbox": day_unread_inbox,
+                "important": day_important_all,
+                "newsletters": day_newsletters_all,
             },
             clusters=clusters_list,
         )
@@ -1078,7 +1104,10 @@ def api_day_summary_ai() -> dict:
         return {
             "ok": True,
             "digest": {
-                "headline": f"Сегодня: всего {day_total}, непрочитано {day_new}, важных {day_important}, рассылок {day_newsletters}.",
+                "headline": (
+                    f"Сегодня: всего {day_total_all} (во входящих {day_total_inbox}), "
+                    f"непрочитано {day_unread_inbox}, важных {day_important_all}, рассылок {day_newsletters_all}."
+                ),
                 "bullets": [
                     f"Темы дня: {', '.join([(c.get('top_subject') or '').strip()[:60] for c in clusters_list[:6] if (c.get('top_subject') or '').strip()])}"
                     or "Темы дня: —"

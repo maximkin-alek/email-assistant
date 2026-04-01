@@ -35,11 +35,16 @@ def summarize_day_digest(*, stats: dict, clusters: list[dict]) -> dict:
         s = (s or "").strip()
         return s if len(s) <= n else s[:n].rstrip() + "…"
 
+    # Поддерживаем расширенную статистику (чтобы не вводить пользователя в заблуждение).
+    total_all = int(stats.get("total_all") or stats.get("total") or 0)
+    total_inbox = int(stats.get("total_inbox") or 0)
+    archived = int(stats.get("archived") or 0)
+    unread_inbox = int(stats.get("unread_inbox") or stats.get("unread") or 0)
+    important = int(stats.get("important") or 0)
+    newsletters = int(stats.get("newsletters") or 0)
     stats_txt = (
-        f"total={int(stats.get('total') or 0)}, "
-        f"unread={int(stats.get('unread') or 0)}, "
-        f"important={int(stats.get('important') or 0)}, "
-        f"newsletters={int(stats.get('newsletters') or 0)}"
+        f"total_all={total_all}, total_inbox={total_inbox}, archived={archived}, "
+        f"unread_inbox={unread_inbox}, important={important}, newsletters={newsletters}"
     )
     lines: list[str] = []
     for i, c in enumerate(clusters[:10], start=1):
@@ -134,7 +139,11 @@ def summarize_day_digest(*, stats: dict, clusters: list[dict]) -> dict:
             actions_out.append({"id": aid, "title": title})
 
     if not headline:
-        headline = f"Сегодня: всего {int(stats.get('total') or 0)}, непрочитано {int(stats.get('unread') or 0)}."
+        base_head = f"Сегодня: всего {total_all}"
+        if total_inbox:
+            base_head += f" (во входящих {total_inbox})"
+        base_head += f", непрочитано {unread_inbox}."
+        headline = base_head
 
     if not bullets_out:
         bullets_out = ["AI не дал буллеты — используйте кластеры ниже."]
