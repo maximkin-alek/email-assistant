@@ -438,6 +438,8 @@ def ai_process_email(email_id: int) -> None:
 
         from_l = (msg.from_email or "").lower()
         subj_l = (msg.subject or "").lower()
+        snippet_l = (msg.snippet or "").lower()
+        body_l = (msg.body_text or "").lower()
 
         def _sender_matches(rule: str) -> bool:
             r = rule.strip().lower()
@@ -454,6 +456,35 @@ def ai_process_email(email_id: int) -> None:
                 return bool(term and term in subj_l)
             return r in from_l
 
+        def _looks_transactional_important() -> bool:
+            """
+            Защита от ложного "рассылка" по отправителю: даже у брендов бывают
+            транзакционные/секьюрные письма (коды входа, подтверждения, счета).
+            """
+            text = f"{subj_l}\n{snippet_l}\n{body_l}"
+            markers = [
+                "код",
+                "otp",
+                "one-time",
+                "одноразов",
+                "подтверж",
+                "verify",
+                "verification",
+                "вход",
+                "login",
+                "парол",
+                "password",
+                "security",
+                "безопас",
+                "2fa",
+                "двухфактор",
+                "счет",
+                "invoice",
+                "оплат",
+                "payment",
+            ]
+            return any(m in text for m in markers)
+
         try:
             result = classify_and_summarize(
                 subject=msg.subject,
@@ -466,7 +497,8 @@ def ai_process_email(email_id: int) -> None:
             # - не "ломаем" категорию в лоб, а сдвигаем score и только затем порогом переводим в important.
             score_i = int(result.score or 0)
             category_i = str(result.category or "normal")
-            if any(_sender_matches(x) for x in bl_list):
+            bl_hit = any(_sender_matches(x) for x in bl_list)
+            if bl_hit and not _looks_transactional_important():
                 # Считать рассылкой: понижаем важность и не даём стать important.
                 score_i = min(score_i, 25)
                 if category_i == "important":
