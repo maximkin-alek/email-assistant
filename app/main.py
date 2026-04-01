@@ -14,7 +14,7 @@ from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from rq.registry import DeferredJobRegistry, ScheduledJobRegistry, StartedJobRegistry
 
 from app.db import Base, engine, session_scope
@@ -358,8 +358,7 @@ def _startup() -> None:
         tt.join(join_s)
         log.warning(f"startup: {name} ok")
 
-    _run_quick("bootstrap imap", _bootstrap_imap_mailboxes, 3.0)
-    _run_quick("bootstrap gmail", _bootstrap_gmail_mailbox, 3.0)
+    # Ящики добавляются через UI (/settings). Бутстрап из .env больше не используем.
 
     # Боевой авто-синк: раз в 5 минут запускаем sync по включенным ящикам.
     def _autosync_loop() -> None:
@@ -388,42 +387,6 @@ def _startup() -> None:
     threading.Thread(target=_autosync_loop, daemon=True).start()
 
 
-def _bootstrap_imap_mailboxes() -> None:
-    """
-    Простой bootstrap для итерации 2: если в .env заданы креды — создаём/обновляем mailboxes.
-    UI настройки добавим позже, когда синхронизация устоится.
-    """
-    candidates: list[tuple[str, str, int, str | None, str | None]] = [
-        ("Яндекс", settings.yandex_imap_host, settings.yandex_imap_port, settings.yandex_imap_user, settings.yandex_imap_password),
-        ("Mail.ru", settings.mailru_imap_host, settings.mailru_imap_port, settings.mailru_imap_user, settings.mailru_imap_password),
-    ]
-
-    with session_scope() as s:
-        for name, host, port, user, password in candidates:
-            if not (user and password):
-                continue
-            mb = s.scalars(select(Mailbox).where(Mailbox.provider == "imap", Mailbox.name == name)).first()
-            if not mb:
-                mb = Mailbox(provider="imap", name=name, imap_folder="INBOX", imap_last_uid=None, is_enabled=True)
-                s.add(mb)
-                s.flush()
-
-            mb.imap_host_enc = encrypt_str(host)
-            mb.imap_port = int(port)
-            mb.imap_user_enc = encrypt_str(user)
-            mb.imap_password_enc = encrypt_str(password)
-            if not mb.imap_folder:
-                mb.imap_folder = "INBOX"
-
-
-def _bootstrap_gmail_mailbox() -> None:
-    with session_scope() as s:
-        mb = s.scalars(select(Mailbox).where(Mailbox.provider == "gmail")).first()
-        if not mb:
-            mb = Mailbox(provider="gmail", name="Gmail", is_enabled=True)
-            s.add(mb)
-
-
 @app.get("/health")
 def health() -> dict:
     return {"ok": True}
@@ -447,14 +410,16 @@ def index(
         mailbox_map = {m.id: m for m in mailboxes}
         # Цвета ящиков для UI (табы + полоска слева).
         palette = [
-            "#2563eb",  # blue
-            "#7c3aed",  # violet
-            "#0f766e",  # teal
-            "#b45309",  # amber
-            "#b42318",  # red
-            "#0e7490",  # cyan
-            "#4338ca",  # indigo
-            "#16a34a",  # green
+            "#1f77b4",  # blue
+            "#ff7f0e",  # orange
+            "#2ca02c",  # green
+            "#d62728",  # red
+            "#9467bd",  # purple
+            "#8c564b",  # brown
+            "#e377c2",  # pink
+            "#17becf",  # cyan
+            "#bcbd22",  # olive
+            "#7f7f7f",  # gray
         ]
         mailbox_colors = {m.id: palette[(m.id - 1) % len(palette)] for m in mailboxes}
         last_sync_at = None
@@ -1034,6 +999,7 @@ def action_mailbox_add_imap(
     name: str = Form(...),
     host: str = Form(...),
     port: int = Form(default=993),
+    tls_verify: str | None = Form(default=None),
     username: str = Form(...),
     password: str = Form(...),
     folder: str = Form(default="INBOX"),
@@ -1060,9 +1026,42 @@ def action_mailbox_add_imap(
         mb.imap_password_enc = encrypt_str(password)
         mb.imap_folder = folder
         mb.imap_last_uid = None
+        mb.imap_tls_verify = bool(tls_verify)
         s.add(mb)
+        s.flush()
+        new_id = mb.id
+
+    # сразу поставим в очередь синк, чтобы пользователь видел результат
+    get_queue().enqueue(sync_imap_mailbox, new_id)
 
     return RedirectResponse("/settings?notice=imap_added", status_code=303)
+
+
+@app.post("/actions/mailbox/add-gmail")
+def action_mailbox_add_gmail() -> RedirectResponse:
+    """
+    Новый флоу: Gmail ящик создаётся в БД, затем запускается OAuth для конкретного mailbox_id.
+    """
+    with session_scope() as s:
+        # Не создаём бесконечные "пустые" Gmail ящики при повторных кликах.
+        # Переиспользуем незавершённый mailbox без токена/почты.
+        mb = (
+            s.scalars(
+                select(Mailbox)
+                .where(
+                    Mailbox.provider == "gmail",
+                    Mailbox.gmail_credentials_enc.is_(None),
+                    Mailbox.gmail_email.is_(None),
+                )
+                .order_by(Mailbox.id.desc())
+            ).first()
+        )
+        if not mb:
+            mb = Mailbox(provider="gmail", name="Gmail", is_enabled=True)
+            s.add(mb)
+            s.flush()
+        mailbox_id = mb.id
+    return RedirectResponse(f"/connect/gmail?mailbox_id={mailbox_id}", status_code=303)
 
 
 @app.post("/actions/rules-save")
@@ -1251,7 +1250,7 @@ def action_sync_one(mailbox_id: int) -> RedirectResponse:
 
 
 @app.get("/connect/gmail")
-def connect_gmail() -> RedirectResponse:
+def connect_gmail(mailbox_id: int | None = None) -> RedirectResponse:
     if not (settings.gmail_oauth_client_id and settings.gmail_oauth_client_secret):
         return RedirectResponse("/", status_code=303)
 
@@ -1268,7 +1267,14 @@ def connect_gmail() -> RedirectResponse:
         }
     }
 
-    state = issue_state("gmail")
+    # Привязываем OAuth к конкретному mailbox_id.
+    if mailbox_id is None:
+        with session_scope() as s:
+            mb = Mailbox(provider="gmail", name="Gmail", is_enabled=True)
+            s.add(mb)
+            s.flush()
+            mailbox_id = mb.id
+    state = issue_state(f"gmail:{mailbox_id}")
     flow = Flow.from_client_config(client_config, scopes=GMAIL_SCOPES, redirect_uri=settings.gmail_oauth_redirect_uri)
     auth_url, _ = flow.authorization_url(
         access_type="offline",
@@ -1281,7 +1287,13 @@ def connect_gmail() -> RedirectResponse:
 
 @app.get("/oauth2/google/callback")
 def oauth2_google_callback(code: str | None = None, state: str | None = None) -> RedirectResponse:
-    if not code or not state or consume_state(state) != "gmail":
+    purpose = consume_state(state or "")
+    mailbox_id: int | None = None
+    if purpose and purpose.startswith("gmail:"):
+        tail = purpose.split(":", 1)[1].strip()
+        if tail.isdigit():
+            mailbox_id = int(tail)
+    if not code or not state or mailbox_id is None:
         return RedirectResponse("/", status_code=303)
 
     if not (settings.gmail_oauth_client_id and settings.gmail_oauth_client_secret):
@@ -1321,19 +1333,155 @@ def oauth2_google_callback(code: str | None = None, state: str | None = None) ->
             log.warning(f"gmail_oauth_callback_error: {type(fetch_err).__name__}: {fetch_err}")
         return RedirectResponse("/settings?gmail_error=oauth_no_token", status_code=303)
 
+    from app.gmail_client import build_gmail_service, get_profile
+
     with session_scope() as s:
-        mb = s.scalars(select(Mailbox).where(Mailbox.provider == "gmail")).first()
+        mb = s.get(Mailbox, mailbox_id)
         if not mb:
-            mb = Mailbox(provider="gmail", name="Gmail", is_enabled=True)
-            s.add(mb)
-            s.flush()
+            return RedirectResponse("/settings?error=gmail_mailbox_missing", status_code=303)
+        if mb.provider != "gmail":
+            return RedirectResponse("/settings?error=gmail_mailbox_wrong_type", status_code=303)
+        # Подтянем email для дедупликации/UI (best-effort).
+        email_addr: str | None = None
+        try:
+            prof = get_profile(build_gmail_service(creds))
+            email_addr = (prof.email_address or "").strip() or None
+        except Exception:
+            email_addr = None
+
+        # Если такой Gmail уже подключён — не создаём дубль.
+        if email_addr:
+            existing = (
+                s.scalars(
+                    select(Mailbox)
+                    .where(
+                        Mailbox.provider == "gmail",
+                        Mailbox.gmail_email == email_addr,
+                        Mailbox.id != mailbox_id,
+                    )
+                    .order_by(Mailbox.id.asc())
+                ).first()
+            )
+            if existing:
+                # Если "текущий" mailbox пустой — можно удалить и сохранить токен в existing.
+                mb2 = existing
+                mb2.gmail_credentials_enc = encrypt_str(creds.to_json())
+                mb2.gmail_last_history_id = None
+                mb2.is_enabled = True
+                mb2.name = f"Gmail: {email_addr}"
+                # Удаляем промежуточный mailbox (без писем).
+                try:
+                    cnt = s.scalar(select(func.count()).select_from(EmailMessage).where(EmailMessage.mailbox_id == mailbox_id))
+                except Exception:
+                    cnt = 0
+                if not cnt:
+                    s.delete(mb)
+                return RedirectResponse("/settings?notice=gmail_connected", status_code=303)
+
         mb.gmail_credentials_enc = encrypt_str(creds.to_json())
         # После переподключения/смены scope лучше сбросить historyId, чтобы инкрементальный sync не "пропускал" события.
         mb.gmail_last_history_id = None
+        if email_addr:
+            mb.gmail_email = email_addr
+            mb.name = f"Gmail: {email_addr}"
         # Профиль (email/historyId) подтянем в sync job. На колбэке не падаем,
         # даже если Gmail API ещё не включён в проекте.
         mb.last_sync_status = "ok"
         mb.last_sync_error = None
 
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse("/settings?notice=gmail_connected", status_code=303)
+
+
+@app.post("/actions/mailbox/toggle/{mailbox_id}")
+def action_mailbox_toggle(mailbox_id: int) -> RedirectResponse:
+    with session_scope() as s:
+        mb = s.get(Mailbox, mailbox_id)
+        if not mb:
+            return RedirectResponse("/settings?error=mailbox_not_found", status_code=303)
+        mb.is_enabled = not bool(mb.is_enabled)
+    return RedirectResponse("/settings", status_code=303)
+
+
+@app.post("/actions/mailbox/tls-verify/{mailbox_id}")
+def action_mailbox_tls_verify(mailbox_id: int) -> RedirectResponse:
+    """
+    Переключатель проверки TLS сертификата для IMAP.
+    """
+    with session_scope() as s:
+        mb = s.get(Mailbox, mailbox_id)
+        if not mb:
+            return RedirectResponse("/settings?error=mailbox_not_found", status_code=303)
+        if mb.provider != "imap":
+            return RedirectResponse("/settings?error=mailbox_wrong_type", status_code=303)
+        cur = bool(getattr(mb, "imap_tls_verify", True))
+        mb.imap_tls_verify = not cur
+    return RedirectResponse("/settings", status_code=303)
+
+
+@app.post("/actions/mailbox/delete/{mailbox_id}")
+def action_mailbox_delete(mailbox_id: int) -> RedirectResponse:
+    with session_scope() as s:
+        mb = s.get(Mailbox, mailbox_id)
+        if not mb:
+            return RedirectResponse("/settings?error=mailbox_not_found", status_code=303)
+        # Удаляем ящик и письма, чтобы не оставлять "висячие" данные.
+        msg_ids = select(EmailMessage.id).where(EmailMessage.mailbox_id == mailbox_id)
+        s.execute(delete(EmailAttachment).where(EmailAttachment.email_id.in_(msg_ids)))
+        s.execute(delete(EmailMessage).where(EmailMessage.mailbox_id == mailbox_id))
+        s.delete(mb)
+    return RedirectResponse("/settings?notice=mailbox_deleted", status_code=303)
+
+
+@app.post("/actions/mailbox/import-env")
+def action_mailbox_import_env() -> RedirectResponse:
+    """
+    Миграция для удобства: берём IMAP креды из .env (старый формат) и
+    создаём/обновляем стандартные ящики в БД, чтобы не вбивать заново.
+    """
+    import os
+
+    def _g(k: str) -> str:
+        return (os.environ.get(k) or "").strip()
+
+    candidates = [
+        {
+            "name": "Яндекс",
+            "host": _g("YANDEX_IMAP_HOST") or "imap.yandex.ru",
+            "port": int((_g("YANDEX_IMAP_PORT") or "993").strip() or "993"),
+            "user": _g("YANDEX_IMAP_USER"),
+            "password": _g("YANDEX_IMAP_PASSWORD"),
+        },
+        {
+            "name": "Mail.ru",
+            "host": _g("MAILRU_IMAP_HOST") or "imap.mail.ru",
+            "port": int((_g("MAILRU_IMAP_PORT") or "993").strip() or "993"),
+            "user": _g("MAILRU_IMAP_USER"),
+            "password": _g("MAILRU_IMAP_PASSWORD"),
+        },
+    ]
+
+    q = get_queue()
+    touched = 0
+    for c in candidates:
+        if not (c["user"] and c["password"]):
+            continue
+        with session_scope() as s:
+            mb = s.scalars(select(Mailbox).where(Mailbox.provider == "imap", Mailbox.name == c["name"])).first()
+            if not mb:
+                mb = Mailbox(provider="imap", name=c["name"], imap_folder="INBOX", imap_last_uid=None, is_enabled=True)
+                s.add(mb)
+                s.flush()
+            mb.is_enabled = True
+            mb.imap_host_enc = encrypt_str(c["host"])
+            mb.imap_port = int(c["port"])
+            mb.imap_user_enc = encrypt_str(c["user"])
+            mb.imap_password_enc = encrypt_str(c["password"])
+            if not (mb.imap_folder or "").strip():
+                mb.imap_folder = "INBOX"
+            mailbox_id = mb.id
+
+        touched += 1
+        q.enqueue(sync_imap_mailbox, mailbox_id)
+
+    return RedirectResponse(f"/settings?notice=env_imported&count={touched}", status_code=303)
 

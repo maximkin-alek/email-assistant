@@ -26,6 +26,7 @@ def ensure_schema() -> None:
         for sql in [
             "ALTER TABLE mailboxes ADD COLUMN IF NOT EXISTS imap_folder VARCHAR(128)",
             "ALTER TABLE mailboxes ADD COLUMN IF NOT EXISTS imap_last_uid INTEGER",
+            "ALTER TABLE mailboxes ADD COLUMN IF NOT EXISTS imap_tls_verify BOOLEAN NOT NULL DEFAULT TRUE",
             "ALTER TABLE mailboxes ADD COLUMN IF NOT EXISTS last_sync_at TIMESTAMPTZ",
             "ALTER TABLE mailboxes ADD COLUMN IF NOT EXISTS last_sync_status VARCHAR(32)",
             "ALTER TABLE mailboxes ADD COLUMN IF NOT EXISTS last_sync_count INTEGER",

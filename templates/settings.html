@@ -33,7 +33,12 @@
       </div>
       <div style="display:flex; gap: 8px; flex-wrap: wrap;">
         <a class="btn" href="/">← Входящие</a>
-        <a class="btn" href="/connect/gmail">Подключить Gmail</a>
+        <form method="post" action="/actions/mailbox/import-env" style="margin:0;">
+          <button class="btn" type="submit">Импортировать ящики из .env</button>
+        </form>
+        <form method="post" action="/actions/mailbox/add-gmail" style="margin:0;">
+          <button class="btn" type="submit">Добавить Gmail</button>
+        </form>
         <form method="post" action="/actions/recompute" style="margin:0;">
           <button class="btn" type="submit">Пересчитать базовую классификацию</button>
         </form>
@@ -44,12 +49,30 @@
       <div class="card" style="margin-top:12px;">
         {% if ui_notice %}
           <div class="ok">
-            {% if ui_notice == "imap_added" %}IMAP ящик добавлен.{% else %}{{ ui_notice }}{% endif %}
+            {% if ui_notice == "imap_added" %}
+              IMAP ящик добавлен.
+            {% elif ui_notice == "gmail_connected" %}
+              Gmail подключён.
+            {% elif ui_notice == "mailbox_deleted" %}
+              Ящик удалён.
+            {% elif ui_notice == "env_imported" %}
+              Ящики импортированы из .env.
+            {% else %}
+              {{ ui_notice }}
+            {% endif %}
           </div>
         {% endif %}
         {% if ui_error %}
           <div class="err">
-            {% if ui_error == "fill_required" %}Заполни имя, host, логин и пароль.{% elif ui_error == "bad_port" %}Порт должен быть 1–65535.{% else %}{{ ui_error }}{% endif %}
+            {% if ui_error == "fill_required" %}
+              Заполни имя, host, логин и пароль.
+            {% elif ui_error == "bad_port" %}
+              Порт должен быть 1–65535.
+            {% elif ui_error == "mailbox_not_found" %}
+              Ящик не найден.
+            {% else %}
+              {{ ui_error }}
+            {% endif %}
           </div>
         {% endif %}
       </div>
@@ -97,6 +120,13 @@
             <div class="v"><input name="host" placeholder="imap.yandex.ru" style="width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:10px;" /></div>
             <div class="k">Порт</div>
             <div class="v"><input name="port" value="993" style="width:140px; padding:8px 10px; border:1px solid #ddd; border-radius:10px;" /></div>
+            <div class="k">TLS проверка сертификата</div>
+            <div class="v">
+              <label class="muted" style="display:flex; gap:8px; align-items:center;">
+                <input type="checkbox" name="tls_verify" value="1" checked />
+                <span>Проверять (рекомендуется). Если VPN/антивирус подменяет сертификаты — отключи.</span>
+              </label>
+            </div>
             <div class="k">Логин</div>
             <div class="v"><input name="username" placeholder="user@yandex.ru" style="width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:10px;" /></div>
             <div class="k">Пароль / пароль приложения</div>
@@ -227,7 +257,7 @@
         <div class="meta" style="justify-content: space-between;">
           <div class="title" style="font-size:16px;">Синхронизация ящиков</div>
           <form method="post" action="/actions/sync-all" style="margin:0;">
-            <button class="btn" type="submit">Синхронизировать IMAP</button>
+            <button class="btn" type="submit">Синхронизировать всё</button>
           </form>
         </div>
 
@@ -246,13 +276,38 @@
               </div>
               <div class="meta" style="margin-top:8px; justify-content: space-between;">
                 <div class="meta">
+                  {% if m.is_enabled %}
+                    <span class="pill">включён</span>
+                  {% else %}
+                    <span class="pill">выключен</span>
+                  {% endif %}
+                {% if m.provider == 'imap' %}
+                  {% if m.imap_tls_verify %}
+                    <span class="pill">TLS verify: on</span>
+                  {% else %}
+                    <span class="pill">TLS verify: off</span>
+                  {% endif %}
+                {% endif %}
                   <span class="pill">sync: {{ m.last_sync_status or "—" }}</span>
                   <span class="pill">count: {{ m.last_sync_count or "—" }}</span>
                   <span class="muted">{{ m.last_sync_at or "" }}</span>
                 </div>
-                <form method="post" action="/actions/sync/{{ m.id }}" style="margin:0;">
-                  <button class="btn" type="submit">Синхронизировать</button>
-                </form>
+                <div style="display:flex; gap:8px;">
+                  <form method="post" action="/actions/sync/{{ m.id }}" style="margin:0;">
+                    <button class="btn" type="submit">Синхронизировать</button>
+                  </form>
+                {% if m.provider == 'imap' %}
+                  <form method="post" action="/actions/mailbox/tls-verify/{{ m.id }}" style="margin:0;">
+                    <button class="btn" type="submit">{% if m.imap_tls_verify %}TLS verify off{% else %}TLS verify on{% endif %}</button>
+                  </form>
+                {% endif %}
+                  <form method="post" action="/actions/mailbox/toggle/{{ m.id }}" style="margin:0;">
+                    <button class="btn" type="submit">{% if m.is_enabled %}Выключить{% else %}Включить{% endif %}</button>
+                  </form>
+                  <form method="post" action="/actions/mailbox/delete/{{ m.id }}" style="margin:0;" onsubmit="return confirm('Удалить ящик и все письма из него?');">
+                    <button class="btn" type="submit" style="border-color:#fecaca; color:#991b1b;">Удалить</button>
+                  </form>
+                </div>
               </div>
               {% if m.last_sync_error %}
                 <div class="err" style="margin-top:8px;">{{ m.last_sync_error }}</div>

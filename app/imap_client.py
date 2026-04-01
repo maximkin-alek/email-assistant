@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import imaplib
-import socket
+import ssl
 from dataclasses import dataclass
 
 
@@ -13,6 +13,7 @@ class ImapConfig:
     password: str
     folder: str = "INBOX"
     timeout_s: int = 20
+    tls_verify: bool = True
 
 
 def _parse_uid_search(data: list[bytes | None]) -> list[int]:
@@ -32,8 +33,11 @@ class ImapSession:
         self.imap: imaplib.IMAP4_SSL | None = None
 
     def __enter__(self) -> "ImapSession":
-        socket.setdefaulttimeout(self.cfg.timeout_s)
-        self.imap = imaplib.IMAP4_SSL(self.cfg.host, self.cfg.port)
+        # Важно: не трогаем глобальный socket.setdefaulttimeout() — это может ломать другие сетевые операции в процессе.
+        ctx = ssl.create_default_context()
+        if not self.cfg.tls_verify:
+            ctx = ssl._create_unverified_context()  # noqa: SLF001
+        self.imap = imaplib.IMAP4_SSL(self.cfg.host, self.cfg.port, timeout=self.cfg.timeout_s, ssl_context=ctx)
         self.imap.login(self.cfg.username, self.cfg.password)
         self.imap.select(self.cfg.folder)
         return self

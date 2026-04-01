@@ -26,6 +26,7 @@ class Mailbox(Base):
     imap_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
     imap_folder: Mapped[str | None] = mapped_column(String(128), nullable=True)
     imap_last_uid: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    imap_tls_verify: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     last_sync_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_sync_status: Mapped[str | None] = mapped_column(String(32), nullable=True)  # ok|error|running

@@ -10,16 +10,6 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     app_encryption_key: str | None = None
 
-    yandex_imap_host: str = "imap.yandex.ru"
-    yandex_imap_port: int = 993
-    yandex_imap_user: str | None = None
-    yandex_imap_password: str | None = None
-
-    mailru_imap_host: str = "imap.mail.ru"
-    mailru_imap_port: int = 993
-    mailru_imap_user: str | None = None
-    mailru_imap_password: str | None = None
-
     gmail_oauth_client_id: str | None = None
     gmail_oauth_client_secret: str | None = None
     gmail_oauth_redirect_uri: str = "http://localhost:8000/oauth2/google/callback"

@@ -15,9 +15,11 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 2) Создай `.env` (можно от `.env.example`) и укажи:
 
 - `APP_ENCRYPTION_KEY=...`
-- (опционально) IMAP доступы:
-  - `YANDEX_IMAP_USER`, `YANDEX_IMAP_PASSWORD`
-  - `MAILRU_IMAP_USER`, `MAILRU_IMAP_PASSWORD`
+- Gmail OAuth (если нужен Gmail):
+  - `GMAIL_OAUTH_CLIENT_ID`
+  - `GMAIL_OAUTH_CLIENT_SECRET`
+  - `GMAIL_OAUTH_REDIRECT_URI` (по умолчанию подходит для локального запуска)
+- AI-провайдер (RouterAI/OpenRouter/Cursor proxy) — см. разделы ниже
 
 3) Запусти:
 
@@ -70,7 +72,8 @@ RouterAI даёт **OpenAI‑совместимый** `chat/completions` API и 
 ## IMAP (Яндекс / Mail.ru)
 
 - Для Яндекс/Mail.ru обычно нужен **пароль приложения** (если включён 2FA) и включённый IMAP-доступ.
-- После старта открой главную страницу и нажми **“Синхронизировать IMAP”**.
+- IMAP‑ящики добавляются через UI: **Настройки → “Добавить IMAP ящик”**.
+- После добавления можно нажать **“Синхронизировать всё”** (на главной странице тоже есть кнопка синхронизации).
 
 ## Полезные заметки
 

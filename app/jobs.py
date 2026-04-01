@@ -172,6 +172,7 @@ def sync_imap_mailbox(mailbox_id: int, limit: int = 50) -> int:
             username=decrypt_str(mb.imap_user_enc),
             password=decrypt_str(mb.imap_password_enc),
             folder=mb.imap_folder or "INBOX",
+            tls_verify=bool(getattr(mb, "imap_tls_verify", True)),
         )
         last_uid = mb.imap_last_uid
 
@@ -255,13 +256,31 @@ def sync_imap_mailbox(mailbox_id: int, limit: int = 50) -> int:
 
         return inserted
     except Exception as e:
+        import socket
+        import ssl
+
+        msg = str(e)[:2000]
+        # Частая причина у новых ящиков: неверный host/порт/SSL или сеть блокирует соединение.
+        if isinstance(e, socket.timeout) or "handshake operation timed out" in msg:
+            msg = (
+                "IMAP: таймаут TLS/SSL рукопожатия. Проверь host/порт (обычно 993), "
+                "что IMAP включён и сеть/антивирус не блокирует соединение."
+            )
+        elif isinstance(e, ssl.SSLError):
+            if "CERTIFICATE_VERIFY_FAILED" in msg or "certificate verify failed" in msg:
+                msg = (
+                    "IMAP: не удалось проверить сертификат (похоже, VPN/антивирус подменяет сертификаты). "
+                    "Попробуй отключить VPN или выключи проверку TLS для этого ящика в настройках."
+                )
+            else:
+                msg = f"IMAP: ошибка TLS/SSL: {msg}"
         with session_scope() as s:
             mb = s.get(Mailbox, mailbox_id)
             if mb:
                 mb.last_sync_at = dt.datetime.now(dt.UTC)
                 mb.last_sync_status = "error"
                 mb.last_sync_count = 0
-                mb.last_sync_error = str(e)[:2000]
+                mb.last_sync_error = msg
         return 0
 
 
