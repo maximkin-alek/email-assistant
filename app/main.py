@@ -1172,22 +1172,6 @@ def connect_gmail() -> RedirectResponse:
     return RedirectResponse(auth_url, status_code=302)
 
 
-@app.post("/actions/gmail-reconnect")
-def action_gmail_reconnect() -> RedirectResponse:
-    """
-    Полный "переподключить Gmail": очищаем токены, чтобы новый OAuth точно запросил нужные scopes.
-    """
-    with session_scope() as s:
-        mb = s.scalars(select(Mailbox).where(Mailbox.provider == "gmail")).first()
-        if mb:
-            mb.gmail_credentials_enc = None
-            mb.gmail_last_history_id = None
-            mb.gmail_email = None
-            mb.last_sync_status = None
-            mb.last_sync_error = None
-    return RedirectResponse("/connect/gmail", status_code=303)
-
-
 @app.get("/oauth2/google/callback")
 def oauth2_google_callback(code: str | None = None, state: str | None = None) -> RedirectResponse:
     if not code or not state or consume_state(state) != "gmail":
