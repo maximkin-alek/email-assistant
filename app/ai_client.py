@@ -131,13 +131,18 @@ def summarize_day_digest(*, stats: dict, clusters: list[dict]) -> dict:
             bullets_out.append(_clip(b.strip(), 180))
     actions = obj.get("actions") if isinstance(obj.get("actions"), list) else []
     actions_out = []
+    # Модель может "галлюцинировать" слишком конкретные обещания в title ("Boosty", "проверь ...").
+    # Чтобы UX не вводил в заблуждение, title фиксируем на наши реальные действия.
+    CANON = {
+        "mark_read_today_new": "Прочитано: все непрочитанные за сегодня",
+        "archive_today_newsletters": "В архив: рассылки за сегодня",
+    }
     for a in actions[:3]:
         if not isinstance(a, dict):
             continue
         aid = str(a.get("id") or "").strip()
-        title = _clip(str(a.get("title") or "").strip(), 80)
-        if aid in {"mark_read_today_new", "archive_today_newsletters"} and title:
-            actions_out.append({"id": aid, "title": title})
+        if aid in CANON:
+            actions_out.append({"id": aid, "title": CANON[aid]})
 
     if not headline:
         base_head = f"Сегодня: всего {total_all}"
