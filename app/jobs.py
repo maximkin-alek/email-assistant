@@ -35,6 +35,9 @@ from app.app_state import (
 from app.queue import get_queue
 from app.settings import settings
 from rq.registry import DeferredJobRegistry, FailedJobRegistry, FinishedJobRegistry, ScheduledJobRegistry, StartedJobRegistry
+import logging
+
+log = logging.getLogger("email-assistant")
 
 
 def sync_remote_mark_read(email_id: int) -> None:
@@ -91,6 +94,16 @@ def sync_remote_mark_read(email_id: int) -> None:
                     if mb2:
                         mb2.gmail_credentials_enc = encrypt_str(creds.to_json())
             except Exception:
+                # важно не молчать: иначе кажется, что "прочитано" синхронизируется, но нет
+                try:
+                    log.exception(
+                        "sync_remote_mark_read:gmail failed email_id=%s mid=%s mailbox_id=%s",
+                        email_id,
+                        msg.provider_message_id,
+                        mb.id,
+                    )
+                except Exception:
+                    pass
                 return
 
 

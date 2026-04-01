@@ -359,13 +359,13 @@
           <div class="subtitle">Поиск и фильтры здесь. Управление ящиками и AI — в настройках.</div>
         </div>
         <div style="display:flex; gap: 10px; flex-wrap: wrap;">
-          <form method="post" action="/actions/sync-all" data-ajax="1" style="margin:0;">
-            <button class="btn" type="submit">Синхронизировать</button>
+          <form method="post" action="/actions/sync-all" data-ajax="1" data-api="/api/sync-all" style="margin:0;">
+            <button class="btn" type="submit" id="syncBtn">Синхронизировать</button>
           </form>
           {% if last_sync_at %}
-            <span class="pill">последняя синхр.: <span data-dt="1" data-iso="{{ last_sync_at.isoformat() }}">…</span></span>
+            <span class="pill" id="lastSyncPill">последняя синхр.: <span data-dt="1" data-iso="{{ last_sync_at.isoformat() }}">…</span></span>
           {% else %}
-            <span class="pill">синхр.: ещё не запускалась</span>
+            <span class="pill" id="lastSyncPill">синхр.: ещё не запускалась</span>
           {% endif %}
           <a class="btn primary" data-nav="1" href="/settings" style="display:inline-block;">Настройки</a>
         </div>
@@ -783,6 +783,39 @@
                 if (data.action === "set_category" && data.category) setCategoryUI(el, data.category);
               });
               clearBulkSelectionUI();
+            }
+            if (url === "/api/sync-all") {
+              const pill = document.getElementById("lastSyncPill");
+              const syncBtn = document.getElementById("syncBtn");
+              if (pill) pill.textContent = "синхронизация…";
+              if (syncBtn) syncBtn.textContent = "Синхронизация…";
+
+              const t0 = Date.now();
+              while (Date.now() - t0 < 60000) {
+                await new Promise((r) => setTimeout(r, 1500));
+                let st = null;
+                try {
+                  const r = await fetch("/api/sync-status", { headers: { "Accept": "application/json" } });
+                  if (r.ok) st = await r.json();
+                } catch (_) { st = null; }
+                if (!st || st.ok === false) continue;
+                if (st.syncing) continue;
+                if (pill) {
+                  if (st.last_sync_at) {
+                    pill.innerHTML = "последняя синхр.: <span data-dt=\"1\" data-iso=\"" + st.last_sync_at + "\">…</span>";
+                    const el = pill.querySelector("[data-dt='1'][data-iso]");
+                    if (el) {
+                      const iso = el.getAttribute("data-iso") || "";
+                      const t = (typeof fmtIso === "function") ? fmtIso(iso) : "";
+                      if (t) el.textContent = t;
+                    }
+                  } else {
+                    pill.textContent = "синхр.: ещё не запускалась";
+                  }
+                }
+                break;
+              }
+              if (syncBtn) syncBtn.textContent = "Синхронизировать";
             }
             if (btn) btn.disabled = false;
           } catch (err) {

@@ -718,14 +718,24 @@ def api_today_group(
 @app.post("/actions/email/{email_id}/archive")
 def action_archive_email(email_id: int) -> RedirectResponse:
     with session_scope() as s:
-        s.execute(update(EmailMessage).where(EmailMessage.id == email_id).values(is_archived=True))
+        msg = s.get(EmailMessage, email_id)
+        if msg:
+            msg.is_archived = True
+            if not msg.is_read:
+                msg.is_read = True
+                get_queue().enqueue(sync_remote_mark_read, msg.id)
     return RedirectResponse("/", status_code=303)
 
 
 @app.post("/api/email/{email_id}/archive")
 def api_archive_email(email_id: int) -> dict:
     with session_scope() as s:
-        s.execute(update(EmailMessage).where(EmailMessage.id == email_id).values(is_archived=True))
+        msg = s.get(EmailMessage, email_id)
+        if msg:
+            msg.is_archived = True
+            if not msg.is_read:
+                msg.is_read = True
+                get_queue().enqueue(sync_remote_mark_read, msg.id)
     return {"ok": True, "email_id": email_id, "archived": True}
 
 
@@ -1147,6 +1157,43 @@ def action_sync_all() -> RedirectResponse:
         else:
             q.enqueue(sync_imap_mailbox, mailbox_id)
     return RedirectResponse("/", status_code=303)
+
+
+@app.post("/api/sync-all")
+def api_sync_all() -> dict:
+    """
+    Запуск синка со страницы / (AJAX). Возвращает ok=true сразу, дальше синк идёт в фоне.
+    """
+    q = get_queue()
+    with session_scope() as s:
+        mailboxes = list(s.execute(select(Mailbox.id, Mailbox.provider).where(Mailbox.is_enabled == True)))  # noqa: E712
+    for mailbox_id, provider in mailboxes:
+        if provider == "gmail":
+            q.enqueue(sync_gmail_mailbox, mailbox_id)
+        else:
+            q.enqueue(sync_imap_mailbox, mailbox_id)
+    return {"ok": True}
+
+
+@app.get("/api/sync-status")
+def api_sync_status() -> dict:
+    """
+    Статус синхронизации для UI: идет ли сейчас sync и когда была последняя успешная попытка.
+    """
+    syncing = False
+    last_sync_at: dt.datetime | None = None
+    with session_scope() as s:
+        mbs = list(s.scalars(select(Mailbox).where(Mailbox.is_enabled == True)))  # noqa: E712
+        for mb in mbs:
+            if mb.last_sync_status == "running":
+                syncing = True
+            if mb.last_sync_at and (last_sync_at is None or mb.last_sync_at > last_sync_at):
+                last_sync_at = mb.last_sync_at
+    return {
+        "ok": True,
+        "syncing": syncing,
+        "last_sync_at": last_sync_at.isoformat() if last_sync_at else "",
+    }
 
 
 @app.post("/actions/sync/{mailbox_id}")
