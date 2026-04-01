@@ -67,6 +67,7 @@ def summarize_day_digest(*, stats: dict, clusters: list[dict]) -> dict:
         '  "actions": [{"id":"mark_read_today_new|archive_today_newsletters","title":"коротко"}]\n'
         "}\n"
         "Запрещено: предлагать интернет-поиск, просить уточнения, писать мета-текст.\n"
+        "Важно: stats включают ВСЕ письма за сегодня (включая архив). Кластеры ниже построены только по фокусу: important/unread/high-score; остальные письма учтены только в stats.\n"
         "Данные:\n"
         f"stats: {stats_txt}\n"
         "clusters:\n"
