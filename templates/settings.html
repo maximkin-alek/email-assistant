@@ -42,32 +42,30 @@
         position: relative;
       }
       .help:hover, .help:focus { outline: none; border-color:#94a3b8; color:#334155; }
-      .help::after {
-        content: attr(data-tip);
-        display: none;
-        position: absolute;
-        left: 50%;
-        bottom: calc(100% + 8px);
-        transform: translateX(-50%);
+      #helpTooltip {
+        position: fixed;
+        inset: auto auto auto auto;
+        max-width: min(360px, calc(100vw - 24px));
         background: #0f172a;
         color: #fff;
         padding: 8px 10px;
         border-radius: 10px;
         font-weight: 600;
         font-size: 12px;
+        line-height: 1.25;
         white-space: pre-wrap;
-        max-width: 360px;
-        width: max-content;
         box-shadow: 0 10px 28px rgba(0,0,0,.18);
-        z-index: 20;
+        z-index: 1000;
+        display: none;
+        pointer-events: none;
       }
-      .help:hover::after, .help:focus::after { display: block; }
       details.helpbox { margin-top: 10px; }
       details.helpbox > summary { cursor: pointer; color:#666; }
       details.helpbox .inner { margin-top: 8px; color:#111; font-size: 13px; line-height: 1.35; }
     </style>
   </head>
   <body>
+    <div id="helpTooltip" role="tooltip" aria-hidden="true"></div>
     <div class="top">
       <div>
         <div class="title">Настройки</div>
@@ -431,6 +429,78 @@
         </div>
       </div>
     </div>
+
+    <script>
+      (function () {
+        const tip = document.getElementById("helpTooltip");
+        if (!tip) return;
+
+        function clamp(v, lo, hi) {
+          return Math.max(lo, Math.min(hi, v));
+        }
+
+        function hide() {
+          tip.style.display = "none";
+          tip.setAttribute("aria-hidden", "true");
+        }
+
+        function showFor(el) {
+          if (!el) return;
+          const text = (el.getAttribute("data-tip") || "").trim();
+          if (!text) return;
+
+          tip.textContent = text;
+          tip.style.display = "block";
+          tip.setAttribute("aria-hidden", "false");
+
+          const pad = 12;
+          const r = el.getBoundingClientRect();
+          // измеряем уже после display:block
+          const tr = tip.getBoundingClientRect();
+
+          const preferAboveTop = r.top - tr.height - 10;
+          const preferBelowTop = r.bottom + 10;
+          const placeBelow = preferAboveTop < pad; // если сверху не помещаемся — показываем снизу
+
+          const top = placeBelow ? preferBelowTop : preferAboveTop;
+          const leftCentered = r.left + (r.width / 2) - (tr.width / 2);
+
+          const left = clamp(leftCentered, pad, window.innerWidth - tr.width - pad);
+          const topClamped = clamp(top, pad, window.innerHeight - tr.height - pad);
+
+          tip.style.left = `${Math.round(left)}px`;
+          tip.style.top = `${Math.round(topClamped)}px`;
+        }
+
+        function closestHelpTarget(t) {
+          return (t && t.closest) ? t.closest(".help[data-tip]") : null;
+        }
+
+        document.addEventListener("mouseover", (e) => {
+          const el = closestHelpTarget(e.target);
+          if (el) showFor(el);
+        }, { passive: true });
+        document.addEventListener("mouseout", (e) => {
+          const from = closestHelpTarget(e.target);
+          const to = closestHelpTarget(e.relatedTarget);
+          if (from && from !== to) hide();
+        }, { passive: true });
+
+        document.addEventListener("focusin", (e) => {
+          const el = closestHelpTarget(e.target);
+          if (el) showFor(el);
+        });
+        document.addEventListener("focusout", (e) => {
+          const from = closestHelpTarget(e.target);
+          const to = closestHelpTarget(e.relatedTarget);
+          if (from && from !== to) hide();
+        });
+
+        window.addEventListener("scroll", hide, { passive: true });
+        window.addEventListener("resize", hide, { passive: true });
+        document.addEventListener("keydown", (e) => { if (e.key === "Escape") hide(); });
+      })();
+    </script>
   </body>
 </html>
 
