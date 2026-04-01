@@ -1193,17 +1193,29 @@
           btn.disabled = true;
           btn.textContent = "AI-выжимка…";
           try {
-            const r = await fetch("/api/day-summary-ai", { method: "POST", headers: { "Accept": "application/json" } });
+            const ctrl = new AbortController();
+            const t = setTimeout(() => ctrl.abort(), 25000);
+            let r = null;
+            try {
+              r = await fetch("/api/day-summary-ai", { method: "POST", headers: { "Accept": "application/json" }, signal: ctrl.signal });
+            } catch (e) {
+              if (String(e && e.name) === "AbortError") {
+                throw new Error("timeout");
+              }
+              throw e;
+            } finally {
+              clearTimeout(t);
+            }
             const j = await r.json();
             if (!j || j.ok === false) throw new Error("api_error");
             render(j.digest || null);
             card.style.display = "";
           } catch (e) {
             clear();
-            if (errEl) {
-              errEl.textContent = "Не удалось получить AI-выжимку. Попробуй ещё раз.";
-              errEl.style.display = "";
-            }
+            const msg = (String(e && e.message) === "timeout")
+              ? "AI-выжимка выполняется слишком долго. Попробуй ещё раз через минуту (или проверь AI-провайдера)."
+              : "Не удалось получить AI-выжимку. Попробуй ещё раз.";
+            if (errEl) { errEl.style.display = ""; errEl.textContent = msg; }
             card.style.display = "";
           } finally {
             btn.disabled = false;
