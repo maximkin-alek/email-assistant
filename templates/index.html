@@ -1022,36 +1022,43 @@
                 }
               }
 
-              const t0 = Date.now();
-              while (Date.now() - t0 < 60000) {
-                await new Promise((r) => setTimeout(r, 1500));
-                let st = null;
-                try {
-                  const r = await fetch("/api/sync-status", { headers: { "Accept": "application/json" } });
-                  if (r.ok) st = await r.json();
-                } catch (_) { st = null; }
-                if (!st || st.ok === false) continue;
-                if (st.syncing) continue;
-                if (pill) {
-                  if (st.last_sync_at) {
-                    pill.title = "Последняя синхронизация";
-                    pill.innerHTML = "синк: <span data-dt=\"1\" data-iso=\"" + st.last_sync_at + "\">…</span>";
-                    const el = pill.querySelector("[data-dt='1'][data-iso]");
-                    if (el) {
-                      const iso = el.getAttribute("data-iso") || "";
-                      const t = fmtIsoLocal(iso);
-                      if (t) el.textContent = t;
+              // Фоновый поллинг статуса — не блокируем основной обработчик submit.
+              // Это помогает избежать ощущения "подвисания", когда синк идёт долго.
+              (async () => {
+                const t0 = Date.now();
+                while (Date.now() - t0 < 60000) {
+                  await new Promise((r) => setTimeout(r, 1500));
+                  let st = null;
+                  try {
+                    const ctrl = new AbortController();
+                    const to = setTimeout(() => ctrl.abort(), 5000);
+                    const r = await fetch("/api/sync-status", { headers: { "Accept": "application/json" }, signal: ctrl.signal });
+                    clearTimeout(to);
+                    if (r.ok) st = await r.json();
+                  } catch (_) { st = null; }
+                  if (!st || st.ok === false) continue;
+                  if (st.syncing) continue;
+                  if (pill) {
+                    if (st.last_sync_at) {
+                      pill.title = "Последняя синхронизация";
+                      pill.innerHTML = "синк: <span data-dt=\"1\" data-iso=\"" + st.last_sync_at + "\">…</span>";
+                      const el = pill.querySelector("[data-dt='1'][data-iso]");
+                      if (el) {
+                        const iso = el.getAttribute("data-iso") || "";
+                        const t = fmtIsoLocal(iso);
+                        if (t) el.textContent = t;
+                      }
+                    } else {
+                      pill.title = "Последняя синхронизация";
+                      pill.textContent = "синк: —";
                     }
-                  } else {
-                    pill.title = "Последняя синхронизация";
-                    pill.textContent = "синк: —";
                   }
+                  break;
                 }
-                break;
-              }
-              if (syncBtn) syncBtn.textContent = "Синхронизировать";
-              // После синхронизации обновим список писем (без перезагрузки).
-              refreshEmailList();
+                if (syncBtn) syncBtn.textContent = "Синхронизировать";
+                // После синхронизации обновим список писем (без перезагрузки).
+                refreshEmailList();
+              })();
             }
             if (url === "/api/day-summary") {
               // Массовые действия из "Сводки дня": обновим страницу, чтобы пересчитались цифры и кластеры.
